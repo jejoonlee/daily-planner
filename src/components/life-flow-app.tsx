@@ -128,6 +128,7 @@ export function LifeFlowApp() {
   const [authNotice, setAuthNotice] = useState("");
   const [page, setPage] = useState<PageName>("dashboard");
   const [modal, setModal] = useState<ModalName>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [projects, setProjects] = useState(initialProjects);
   const [tasks, setTasks] = useState(initialTasks);
@@ -149,6 +150,7 @@ export function LifeFlowApp() {
 
   const closeModal = useCallback(() => {
     setModal(null);
+    setEditingId(null);
     setIntakeParsed(false);
   }, []);
 
@@ -339,20 +341,21 @@ export function LifeFlowApp() {
     }
     const data = parsed.data;
     const task: Task = {
-      id: uid("task"),
+      ...tasks.find((item) => item.id === editingId),
+      id: editingId ?? uid("task"),
       title: data.title,
       description: data.description,
       projectId: data.projectId,
       priority: data.priority,
-      status: "todo",
+      status: tasks.find((item) => item.id === editingId)?.status ?? "todo",
       scheduledDate: data.scheduledDate,
-      dueDate: data.scheduledDate,
+      dueDate: data.dueDate ?? data.scheduledDate,
       estimatedMinutes: data.estimatedMinutes
     };
-    setTasks((current) => [task, ...current]);
+    setTasks((current) => editingId ? current.map((item) => item.id === editingId ? task : item) : [task, ...current]);
     setSelectedTaskId(task.id);
     closeModal();
-    setToast("새 할 일을 저장했습니다.");
+    setToast(editingId ? "할 일을 수정했습니다." : "새 할 일을 저장했습니다.");
   }
 
   function submitProject(event: FormEvent<HTMLFormElement>) {
@@ -387,7 +390,7 @@ export function LifeFlowApp() {
     }
     const data = parsed.data;
     const workout: Workout = {
-      id: uid("workout"),
+      id: editingId ?? uid("workout"),
       title: data.title,
       startedAt: data.startedAt,
       place: data.place,
@@ -397,9 +400,9 @@ export function LifeFlowApp() {
       reps: data.reps,
       weightKg: data.weightKg
     };
-    setWorkouts((current) => [workout, ...current]);
+    setWorkouts((current) => editingId ? current.map((item) => item.id === editingId ? workout : item) : [workout, ...current]);
     closeModal();
-    setToast("운동 기록을 저장했습니다.");
+    setToast(editingId ? "운동 기록을 수정했습니다." : "운동 기록을 저장했습니다.");
   }
 
   function submitTransaction(event: FormEvent<HTMLFormElement>) {
@@ -411,7 +414,7 @@ export function LifeFlowApp() {
     }
     const data = parsed.data;
     const transaction: Transaction = {
-      id: uid("transaction"),
+      id: editingId ?? uid("transaction"),
       happenedAt: data.happenedAt,
       name: data.name,
       merchant: data.merchant,
@@ -420,9 +423,9 @@ export function LifeFlowApp() {
       category: data.category,
       account: data.account
     };
-    setTransactions((current) => [transaction, ...current]);
+    setTransactions((current) => editingId ? current.map((item) => item.id === editingId ? transaction : item) : [transaction, ...current]);
     closeModal();
-    setToast("가계부 거래를 등록했습니다.");
+    setToast(editingId ? "가계부 거래를 수정했습니다." : "가계부 거래를 등록했습니다.");
   }
 
   async function testNotification() {
@@ -603,7 +606,7 @@ export function LifeFlowApp() {
               {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={setSelectedTaskId} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
               {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={setSelectedTaskId} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
               {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={setSelectedTaskId} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} />}
-              {selectedTask && <TaskDetail task={selectedTask} project={selectedTask.projectId ? projectById[selectedTask.projectId] : undefined} />}
+              {selectedTask && <><button className="secondary-button" onClick={() => { setEditingId(selectedTask.id); setModal("task"); }}>할 일 수정</button><TaskDetail task={selectedTask} project={selectedTask.projectId ? projectById[selectedTask.projectId] : undefined} /></>}
             </section>
           )}
 
@@ -611,7 +614,7 @@ export function LifeFlowApp() {
             <section>
               <PageHeading title="운동 관리" description="운동 세션과 세트별 상세를 기록합니다." actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
               <div className="dashboard-grid">
-                {workouts.map((workout) => <Panel key={workout.id} title={workout.title} meta={displayDate(workout.startedAt)}><p className="record-copy">{workout.place} · {workout.durationMinutes}분</p><p className="record-copy">{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</p></Panel>)}
+                {workouts.map((workout) => <Panel key={workout.id} title={workout.title} meta={displayDate(workout.startedAt)} action={<button className="text-button" aria-label={`${workout.title} 수정`} onClick={() => { setEditingId(workout.id); setModal("workout"); }}>수정</button>}><p className="record-copy">{workout.place} · {workout.durationMinutes}분</p><p className="record-copy">{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</p></Panel>)}
               </div>
             </section>
           )}
@@ -640,7 +643,7 @@ export function LifeFlowApp() {
                 </details>
               </div>
               <Panel title="거래 내역" meta={`${filteredTransactions.length}건`}>
-                <div className="table-scroll"><table><thead><tr><th>일시</th><th>내역</th><th>사용처</th><th>흐름</th><th>카테고리</th><th className="number">금액</th></tr></thead><tbody>{filteredTransactions.map((transaction) => <tr key={transaction.id}><td>{displayDate(transaction.happenedAt)}</td><td>{transaction.name}</td><td>{transaction.merchant}</td><td>{transaction.flow === "income" ? "수입" : "지출"}</td><td>{transaction.category}</td><td className={`number ${transaction.flow}`}>{signedWon(transactionValue(transaction))}</td></tr>)}</tbody></table></div>
+                <div className="table-scroll"><table><thead><tr><th>일시</th><th>내역</th><th>사용처</th><th>흐름</th><th>카테고리</th><th className="number">금액</th><th>수정</th></tr></thead><tbody>{filteredTransactions.map((transaction) => <tr key={transaction.id}><td>{displayDate(transaction.happenedAt)}</td><td>{transaction.name}</td><td>{transaction.merchant}</td><td>{transaction.flow === "income" ? "수입" : "지출"}</td><td>{transaction.category}</td><td className={`number ${transaction.flow}`}>{signedWon(transactionValue(transaction))}</td><td><button className="text-button" aria-label={`${transaction.name} 수정`} onClick={() => { setEditingId(transaction.id); setModal("money"); }}>수정</button></td></tr>)}</tbody></table></div>
               </Panel>
             </section>
           )}
@@ -662,12 +665,13 @@ export function LifeFlowApp() {
       </main>
 
       {modal && (
-        <EntryModal title={modalTitle(modal)} description={modalDescription(modal)} onClose={closeModal}>
+        <EntryModal title={editingId ? `${pageTitles[page]} 수정` : modalTitle(modal)} description={modalDescription(modal)} onClose={closeModal}>
           {modal === "intake" && <IntakeForm parsed={intakeParsed} onParse={() => setIntakeParsed(true)} onSave={() => { closeModal(); setToast("오늘 계획을 등록했습니다."); }} />}
-          {modal === "task" && <TaskForm projects={projects} defaultDate={todayDate} onSubmit={submitTask} />}
+          {modal === "task" && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} defaultDate={todayDate} onSubmit={submitTask} />}
           {modal === "project" && <ProjectForm defaultDate={shiftDate(todayDate, 30)} onSubmit={submitProject} />}
-          {modal === "workout" && <WorkoutForm defaultDate={todayDate} onSubmit={submitWorkout} />}
-          {modal === "money" && <TransactionForm defaultDate={todayDate} onSubmit={submitTransaction} />}
+          {modal === "workout" && <WorkoutForm initial={workouts.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitWorkout} />}
+          {modal === "money" && <TransactionForm initial={transactions.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitTransaction} />}
+          {editingId && <button className="secondary-button" type="button" onClick={closeModal}>취소</button>}
         </EntryModal>
       )}
     </div>
@@ -882,28 +886,28 @@ function IntakeForm({ parsed, onParse, onSave }: { parsed: boolean; onParse: () 
   return <div><label className="field"><span>오늘 계획</span><textarea defaultValue="오전 10시 팀 회의, 오후에는 기획안 정리 P1. 퇴근 후 하체 운동 50분." /></label>{parsed && <div className="parse-grid"><div>일정 · 10:00 팀 회의</div><div>할 일 · 기획안 정리 · P1</div><div>운동 · 하체 · 50분</div></div>}<div className="form-actions"><button className="secondary-button" type="button" onClick={onParse}>분석하기</button>{parsed && <button className="primary-button" type="button" onClick={onSave}>등록하기</button>}</div></div>;
 }
 
-function TaskForm({ projects, defaultDate, onSubmit }: { projects: Project[]; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="할 일 제목" defaultValue="QA 완료 조건 확인" required /><label className="field"><span>프로젝트</span><select name="projectId"><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><SelectPriority /><Field name="scheduledDate" label="예정일 / 마감일" type="date" defaultValue={defaultDate} required /><label className="field"><span>반복</span><select name="recurrence"><option>반복 없음</option><option>매일</option><option>매주</option><option>매월</option></select></label><Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue="90" required /></div><label className="field"><span>상세 내용</span><textarea name="description" defaultValue="로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다." required /></label><ModalActions submitLabel="할 일 저장" /></form>;
+function TaskForm({ initial, projects, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="할 일 제목" defaultValue={initial?.title !== undefined ? String(initial.title) : "QA 완료 조건 확인"} required /><label className="field"><span>프로젝트</span><select name="projectId" defaultValue={initial?.projectId}><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><SelectPriority defaultValue={initial?.priority} /><Field name="scheduledDate" label={initial ? "예정일" : "예정일 / 마감일"} type="date" defaultValue={initial?.scheduledDate ?? defaultDate} required />{initial && <Field name="dueDate" label="마감일" type="date" defaultValue={initial.dueDate} required />}<label className="field"><span>반복</span><select name="recurrence"><option>반복 없음</option><option>매일</option><option>매주</option><option>매월</option></select></label><Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue={initial?.estimatedMinutes !== undefined ? String(initial.estimatedMinutes) : "90"} required /></div><label className="field"><span>상세 내용</span><textarea name="description" defaultValue={initial?.description ?? "로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다."} required /></label><ModalActions submitLabel={initial ? "수정 저장" : "할 일 저장"} /></form>;
 }
 
 function ProjectForm({ defaultDate, onSubmit }: { defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return <form onSubmit={onSubmit}><div className="form-grid"><Field name="name" label="프로젝트 이름" defaultValue="신규 PWA 출시" required /><SelectPriority /><Field name="dueDate" label="목표 완료일" type="date" defaultValue={defaultDate} required /><Field name="milestone" label="첫 마일스톤" defaultValue="MVP 기능 확정" /></div><label className="field"><span>프로젝트 설명</span><textarea name="description" defaultValue="생활 관리 기능을 하나의 모바일 PWA로 통합하고 매일 아침 계획 입력 알림을 제공한다." required /></label><ModalActions submitLabel="프로젝트 저장" /></form>;
 }
 
-function WorkoutForm({ defaultDate, onSubmit }: { defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="운동명" defaultValue="하체 근력 운동" required /><Field name="startedAt" label="운동 일시" type="datetime-local" defaultValue={`${defaultDate}T19:00`} required /><Field name="place" label="장소" defaultValue="헬스장" required /><Field name="durationMinutes" label="운동 시간(분)" type="number" defaultValue="50" required /><Field name="exercise" label="운동 종목" defaultValue="스쿼트" required /><Field name="sets" label="세트 수" type="number" defaultValue="4" required /><Field name="reps" label="횟수" type="number" defaultValue="8" required /><Field name="weightKg" label="중량(kg)" type="number" defaultValue="80" required /></div><ModalActions submitLabel="운동 저장" /></form>;
+function WorkoutForm({ initial, defaultDate, onSubmit }: { initial?: Workout; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="운동명" defaultValue={initial?.title !== undefined ? String(initial.title) : "하체 근력 운동"} required /><Field name="startedAt" label="운동 일시" type="datetime-local" defaultValue={initial?.startedAt ?? `${defaultDate}T19:00`} required /><Field name="place" label="장소" defaultValue={initial?.place !== undefined ? String(initial.place) : "헬스장"} required /><Field name="durationMinutes" label="운동 시간(분)" type="number" defaultValue={initial?.durationMinutes !== undefined ? String(initial.durationMinutes) : "50"} required /><Field name="exercise" label="운동 종목" defaultValue={initial?.exercise !== undefined ? String(initial.exercise) : "스쿼트"} required /><Field name="sets" label="세트 수" type="number" defaultValue={initial?.sets !== undefined ? String(initial.sets) : "4"} required /><Field name="reps" label="횟수" type="number" defaultValue={initial?.reps !== undefined ? String(initial.reps) : "8"} required /><Field name="weightKg" label="중량(kg)" type="number" defaultValue={initial?.weightKg !== undefined ? String(initial.weightKg) : "80"} required /></div><ModalActions submitLabel={initial ? "수정 저장" : "운동 저장"} /></form>;
 }
 
-function TransactionForm({ defaultDate, onSubmit }: { defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="happenedAt" label="거래 일시" type="datetime-local" defaultValue={`${defaultDate}T12:00`} required /><label className="field"><span>수입 / 지출</span><select name="flow"><option value="expense">− 지출</option><option value="income">+ 수입</option></select></label><Field name="name" label="내역" defaultValue="점심" required /><Field name="merchant" label="사용처" defaultValue="회사 근처 식당" required /><Field name="amount" label="금액" type="number" defaultValue="12000" required /><label className="field"><span>카테고리</span><select name="category"><option>소비 › 식비</option><option>소비 › 카페·간식</option><option>소비 › 교통</option><option>소비 › 주거</option><option>투자 › 국내주식</option><option>투자 › 미국주식</option><option>수입 › 급여</option><option>수입 › 기타</option></select></label><label className="field"><span>금융 계좌</span><select name="account"><option>신한 신용카드</option><option>국민 체크카드</option><option>생활비 계좌</option><option>현금</option><option>증권 계좌</option></select></label></div><ModalActions submitLabel="등록" /></form>;
+function TransactionForm({ initial, defaultDate, onSubmit }: { initial?: Transaction; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="happenedAt" label="거래 일시" type="datetime-local" defaultValue={initial?.happenedAt ?? `${defaultDate}T12:00`} required /><label className="field"><span>수입 / 지출</span><select name="flow" defaultValue={initial?.flow}><option value="expense">− 지출</option><option value="income">+ 수입</option></select></label><Field name="name" label="내역" defaultValue={initial?.name !== undefined ? String(initial.name) : "점심"} required /><Field name="merchant" label="사용처" defaultValue={initial?.merchant !== undefined ? String(initial.merchant) : "회사 근처 식당"} required /><Field name="amount" label="금액" type="number" defaultValue={initial?.amount !== undefined ? String(initial.amount) : "12000"} required /><label className="field"><span>카테고리</span><select name="category" defaultValue={initial?.category}><option>소비 › 식비</option><option>소비 › 카페·간식</option><option>소비 › 교통</option><option>소비 › 주거</option><option>투자 › 국내주식</option><option>투자 › 미국주식</option><option>수입 › 급여</option><option>수입 › 기타</option></select></label><label className="field"><span>금융 계좌</span><select name="account" defaultValue={initial?.account}><option>신한 신용카드</option><option>국민 체크카드</option><option>생활비 계좌</option><option>현금</option><option>증권 계좌</option></select></label></div><ModalActions submitLabel={initial ? "수정 저장" : "등록"} /></form>;
 }
 
 function Field({ name, label, type = "text", defaultValue, required = false }: { name: string; label: string; type?: string; defaultValue?: string; required?: boolean }) {
   return <label className="field"><span>{label}</span><input name={name} type={type} defaultValue={defaultValue} required={required} /></label>;
 }
 
-function SelectPriority() {
-  return <label className="field"><span>우선순위</span><select name="priority">{(["P1", "P2", "P3", "P4"] as Priority[]).map((priority) => <option key={priority} value={priority}>{priorityLabel[priority]}</option>)}</select></label>;
+function SelectPriority({ defaultValue }: { defaultValue?: Priority } = {}) {
+  return <label className="field"><span>우선순위</span><select name="priority" defaultValue={defaultValue}>{(["P1", "P2", "P3", "P4"] as Priority[]).map((priority) => <option key={priority} value={priority}>{priorityLabel[priority]}</option>)}</select></label>;
 }
 
 function modalTitle(modal: Exclude<ModalName, null>) {

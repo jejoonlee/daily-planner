@@ -20,6 +20,61 @@ afterEach(() => {
 });
 
 describe("LifeFlowApp", () => {
+  it("할 일을 기존 값으로 수정하고 상태와 마감일을 유지한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: "칸반" }));
+    fireEvent.click(screen.getByRole("button", { name: /와이어프레임 피드백 반영/ }));
+    fireEvent.click(screen.getByRole("button", { name: "할 일 수정" }));
+    expect(screen.getByLabelText("우선순위")).toHaveValue("P2");
+    expect(screen.getByLabelText("마감일")).toHaveValue("2026-08-27");
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "수정한 할 일" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(within(screen.getByRole("group", { name: "진행 중 영역" })).getByRole("button", { name: /수정한 할 일/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "할 일 수정" }));
+    expect(screen.getByLabelText("마감일")).toHaveValue("2026-08-27");
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "취소할 제목" } });
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(screen.queryByText("취소할 제목")).not.toBeInTheDocument();
+  });
+
+  it("운동 수정은 중복을 만들지 않고 취소 후 새 입력과 분리된다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "운동" }));
+    fireEvent.click(screen.getByRole("button", { name: "하체 근력 운동 수정" }));
+    expect(screen.getByLabelText("중량(kg)")).toHaveValue(80);
+    fireEvent.change(screen.getByLabelText("운동명"), { target: { value: "수정 운동" } });
+    fireEvent.change(screen.getByLabelText("중량(kg)"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(screen.getAllByRole("button", { name: /수정$/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "수정 운동 수정" }));
+    expect(screen.getByLabelText("중량(kg)")).toHaveValue(0);
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "+ 운동 기록" }));
+    expect(screen.getByRole("button", { name: "운동 저장" })).toBeInTheDocument();
+    expect(screen.getByLabelText("중량(kg)")).toHaveValue(80);
+  });
+
+  it("가계부 수정은 금액을 검증하고 합계와 기존 계좌를 유지한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "가계부" }));
+    fireEvent.click(screen.getByRole("button", { name: "월급 수정" }));
+    expect(screen.getByLabelText("수입 / 지출")).toHaveValue("income");
+    expect(screen.getByLabelText("금융 계좌")).toHaveValue("생활비 계좌");
+    fireEvent.change(screen.getByLabelText("금액"), { target: { value: "-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("금액"), { target: { value: "4300000" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(screen.getByText("3건")).toBeInTheDocument();
+    expect(within(screen.getByText("이번 달 잔액").closest("article")!).getByText("+4,282,500원")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "월급 수정" }));
+    expect(screen.getByLabelText("금융 계좌")).toHaveValue("생활비 계좌");
+  });
+
   it("로그인 후 대시보드와 주요 메뉴를 표시한다", () => {
     render(createElement(LifeFlowApp));
 

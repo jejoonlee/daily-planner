@@ -28,6 +28,7 @@ export const taskSchema = z.object({
   projectId: z.string().trim().transform((value) => value || undefined),
   priority: priorityValue,
   scheduledDate: dateValue,
+  dueDate: dateValue.optional(),
   estimatedMinutes: z.coerce.number().int("예상 시간은 정수로 입력해 주세요.").positive("예상 시간은 1분 이상이어야 합니다.").max(10080, "예상 시간은 7일 이하여야 합니다.")
 });
 
