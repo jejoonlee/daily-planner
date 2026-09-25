@@ -1,5 +1,3 @@
-create extension if not exists pgcrypto;
-
 create table public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
@@ -248,7 +246,7 @@ create index notification_jobs_subscription_fk_idx on public.notification_jobs (
 create index notification_logs_job_fk_idx on public.notification_logs (job_id);
 create index notification_logs_subscription_fk_idx on public.notification_logs (subscription_id);
 
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$
+create or replace function public.set_updated_at() returns trigger language plpgsql set search_path = '' as $$
 begin new.updated_at = now(); return new; end;
 $$;
 
@@ -263,9 +261,12 @@ begin
   ] loop
     execute format('create trigger set_%I_updated_at before update on public.%I for each row execute function public.set_updated_at()', table_name, table_name);
     execute format('alter table public.%I enable row level security', table_name);
-    execute format('create policy %I on public.%I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid())', table_name || '_owner', table_name);
+    execute format('create policy %I on public.%I for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', table_name || '_owner', table_name);
+    execute format('grant select, insert, update, delete on table public.%I to authenticated', table_name);
   end loop;
 end $$;
+
+revoke execute on function public.set_updated_at() from public, anon, authenticated;
 
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -275,5 +276,7 @@ begin
   return new;
 end;
 $$;
+
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
