@@ -37,6 +37,17 @@ const statusLabel: Record<TaskStatus, string> = {
 
 const APP_TIME_ZONE = "Asia/Seoul";
 
+function authErrorMessage(code?: string, status?: number) {
+  if (code === "email_not_confirmed") return "이메일 인증이 필요합니다. 가입 확인 메일의 인증 링크를 눌러 주세요.";
+  if (status === 429 || code === "over_email_send_rate_limit") return "요청이 많습니다. 잠시 기다린 뒤 다시 시도해 주세요.";
+  if (code === "weak_password") return "더 강한 비밀번호를 사용해 주세요. 영문 대소문자, 숫자, 기호를 조합해 주세요.";
+  if (code === "signup_disabled") return "현재 회원가입이 비활성화되어 있습니다. 관리자에게 문의해 주세요.";
+  if (code === "email_address_not_authorized") return "현재 메일 발송 설정에서는 이 이메일로 가입할 수 없습니다. 관리자에게 문의해 주세요.";
+  if (code === "invalid_credentials" || code === "user_already_exists") return "이메일 또는 비밀번호를 확인해 주세요. 이미 가입했다면 로그인해 주세요.";
+  if (status && status >= 500) return "인증 서버에서 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  return "요청을 처리하지 못했습니다. 이메일과 비밀번호를 확인하고 다시 시도해 주세요.";
+}
+
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -105,7 +116,7 @@ function yearsAround(value: string) {
 }
 
 export function LifeFlowApp() {
-  const supabase = useMemo(() => process.env.NODE_ENV === "test" ? null : getSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const demoAuthEnabled = process.env.NODE_ENV === "test" || (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true");
   const [todayDate, setTodayDate] = useState(() => dateKeyInTimeZone(new Date()));
   const currentMonth = todayDate.slice(0, 7);
@@ -113,6 +124,8 @@ export function LifeFlowApp() {
   const [authReady, setAuthReady] = useState(process.env.NODE_ENV === "test" || !hasSupabaseConfig);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authNotice, setAuthNotice] = useState("");
   const [page, setPage] = useState<PageName>("dashboard");
   const [modal, setModal] = useState<ModalName>(null);
   const [toast, setToast] = useState("");
@@ -256,13 +269,21 @@ export function LifeFlowApp() {
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (authBusy) return;
     setAuthError("");
-    const parsed = loginSchema.safeParse(formDataValues(new FormData(event.currentTarget)));
+    setAuthNotice("");
+    const form = event.currentTarget;
+    const values = formDataValues(new FormData(form));
+    const parsed = loginSchema.safeParse(values);
     if (!parsed.success) {
       setAuthError(firstValidationError(parsed.error));
       return;
     }
-    if (demoAuthEnabled) {
+    if (authMode === "signup" && values.passwordConfirm !== parsed.data.password) {
+      setAuthError("비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    if (demoAuthEnabled && !supabase && authMode === "login") {
       setAuthenticated(true);
       return;
     }
@@ -273,8 +294,26 @@ export function LifeFlowApp() {
 
     setAuthBusy(true);
     try {
+      if (authMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          ...parsed.data,
+          options: { emailRedirectTo: `${window.location.origin}/` }
+        });
+        if (error) {
+          setAuthError(authErrorMessage(error.code, error.status));
+          return;
+        }
+        form.reset();
+        if (data.session) {
+          setAuthenticated(true);
+        } else {
+          setAuthMode("login");
+          setAuthNotice("가입 확인 메일을 확인해 주세요. 이메일의 인증 링크를 누른 뒤 로그인할 수 있습니다. 메일이 없으면 스팸함을 확인해 주세요. 이미 가입한 이메일이라면 기존 비밀번호로 로그인해 주세요.");
+        }
+        return;
+      }
       const { error } = await supabase.auth.signInWithPassword(parsed.data);
-      if (error) setAuthError("이메일 또는 비밀번호를 확인해 주세요.");
+      if (error) setAuthError(authErrorMessage(error.code, error.status));
     } catch {
       setAuthError("로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
@@ -426,14 +465,22 @@ export function LifeFlowApp() {
         <form className="login-card" onSubmit={submitLogin}>
           <div className="brand"><span className="brand-mark">L</span><span>Life Flow</span></div>
           <div>
-            <h1>다시 오신 것을 환영해요</h1>
-            <p>오늘의 일정과 생활 기록을 한곳에서 관리하세요.</p>
+            <h1>{authMode === "signup" ? "Life Flow 시작하기" : "다시 오신 것을 환영해요"}</h1>
+            <p>{authMode === "signup" ? "이메일과 비밀번호로 나만의 계정을 만드세요." : "오늘의 일정과 생활 기록을 한곳에서 관리하세요."}</p>
           </div>
           {!supabase && !demoAuthEnabled && <p className="form-error" role="alert">Supabase 환경변수를 설정해야 로그인할 수 있습니다.</p>}
-          <label><span>이메일</span><input name="email" type="email" autoComplete="email" required /></label>
-          <label><span>비밀번호</span><input name="password" type="password" autoComplete="current-password" minLength={8} required /></label>
+          <label><span>이메일</span><input name="email" type="email" autoComplete="email" disabled={authBusy} required /></label>
+          <label><span>비밀번호</span><input name="password" type="password" autoComplete={authMode === "signup" ? "new-password" : "current-password"} minLength={8} disabled={authBusy} required /></label>
+          {authMode === "signup" && <><p>비밀번호는 8자 이상으로 입력해 주세요.</p><label><span>비밀번호 확인</span><input name="passwordConfirm" type="password" autoComplete="new-password" minLength={8} disabled={authBusy} required /></label></>}
           {authError && <p className="form-error" role="alert">{authError}</p>}
-          <button className="primary-button full-button" type="submit" disabled={authBusy || (!supabase && !demoAuthEnabled)}>{authBusy ? "로그인 중…" : "로그인"}</button>
+          {authNotice && <p role="status">{authNotice}</p>}
+          <button className="primary-button full-button" type="submit" disabled={authBusy || (!supabase && (!demoAuthEnabled || authMode === "signup"))}>{authBusy ? "처리 중…" : authMode === "signup" ? "회원가입" : "로그인"}</button>
+          <button className="text-button" type="button" disabled={authBusy} onClick={(event) => {
+            event.currentTarget.form?.reset();
+            setAuthMode(authMode === "login" ? "signup" : "login");
+            setAuthError("");
+            setAuthNotice("");
+          }}>{authMode === "login" ? "처음이신가요? 회원가입" : "이미 계정이 있나요? 로그인"}</button>
         </form>
       </main>
     );
