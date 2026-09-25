@@ -132,7 +132,9 @@ create table public.transactions (
   account_id uuid references public.financial_accounts(id) on delete set null,
   import_id uuid references public.transaction_imports(id) on delete set null,
   happened_at timestamptz not null, amount numeric(14,2) not null check (amount >= 0), currency char(3) not null default 'KRW',
-  name text not null, merchant text, notes text, flow text not null default 'expense', source text not null default 'manual',
+  name text not null, merchant text, notes text,
+  flow text not null default 'expense' check (flow in ('expense', 'income', 'saving', 'investment')),
+  source text not null default 'manual',
   external_key text, sort_order integer not null default 0,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz,
   unique (user_id, source, external_key)
@@ -211,6 +213,40 @@ create index tasks_user_date_idx on public.tasks (user_id, scheduled_date) where
 create index tasks_project_status_idx on public.tasks (project_id, status, sort_order) where deleted_at is null;
 create index transactions_user_date_idx on public.transactions (user_id, happened_at desc) where deleted_at is null;
 create index notification_jobs_due_idx on public.notification_jobs (status, scheduled_at) where deleted_at is null;
+
+-- RLS의 user_id 필터와 화면별 기본 조회 경로를 지원하는 인덱스
+create index projects_user_active_idx on public.projects (user_id, status, sort_order) where deleted_at is null;
+create index project_milestones_user_due_idx on public.project_milestones (user_id, due_date) where deleted_at is null;
+create index schedules_user_start_idx on public.schedules (user_id, start_at) where deleted_at is null;
+create index recurrence_rules_user_entity_idx on public.recurrence_rules (user_id, entity_type, entity_id) where deleted_at is null;
+create index workout_templates_user_active_idx on public.workout_templates (user_id, active, sort_order) where deleted_at is null;
+create index workout_sessions_user_started_idx on public.workout_sessions (user_id, started_at desc) where deleted_at is null;
+create index workout_exercises_user_session_idx on public.workout_exercises (user_id, session_id, exercise_order) where deleted_at is null;
+create index exercise_sets_user_exercise_idx on public.exercise_sets (user_id, exercise_id, set_number) where deleted_at is null;
+create index transaction_categories_user_active_idx on public.transaction_categories (user_id, active, sort_order) where deleted_at is null;
+create index financial_accounts_user_active_idx on public.financial_accounts (user_id, active, sort_order) where deleted_at is null;
+create index transaction_imports_user_created_idx on public.transaction_imports (user_id, created_at desc) where deleted_at is null;
+create index notification_jobs_user_scheduled_idx on public.notification_jobs (user_id, scheduled_at) where deleted_at is null;
+create index notification_logs_user_sent_idx on public.notification_logs (user_id, sent_at desc) where deleted_at is null;
+create index entity_tags_user_entity_idx on public.entity_tags (user_id, entity_type, entity_id) where deleted_at is null;
+create index attachments_user_entity_idx on public.attachments (user_id, entity_type, entity_id) where deleted_at is null;
+create index ai_input_logs_user_created_idx on public.ai_input_logs (user_id, created_at desc) where deleted_at is null;
+
+-- PostgreSQL은 FK 인덱스를 자동 생성하지 않으므로 관계 변경·삭제 경로를 별도로 인덱싱
+create index project_milestones_project_fk_idx on public.project_milestones (project_id);
+create index tasks_project_fk_idx on public.tasks (project_id);
+create index tasks_parent_fk_idx on public.tasks (parent_task_id);
+create index schedules_project_fk_idx on public.schedules (project_id);
+create index workout_sessions_template_fk_idx on public.workout_sessions (template_id);
+create index workout_exercises_session_fk_idx on public.workout_exercises (session_id);
+create index transaction_categories_parent_fk_idx on public.transaction_categories (parent_id);
+create index transaction_imports_account_fk_idx on public.transaction_imports (account_id);
+create index transactions_category_fk_idx on public.transactions (category_id);
+create index transactions_account_fk_idx on public.transactions (account_id);
+create index transactions_import_fk_idx on public.transactions (import_id);
+create index notification_jobs_subscription_fk_idx on public.notification_jobs (subscription_id);
+create index notification_logs_job_fk_idx on public.notification_logs (job_id);
+create index notification_logs_subscription_fk_idx on public.notification_logs (subscription_id);
 
 create or replace function public.set_updated_at() returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end;

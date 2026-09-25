@@ -1,6 +1,6 @@
 # Life Flow
 
-일정, 할 일, 프로젝트, 운동, 돈 관리와 아침 푸시 알림을 제공하는 개인용 PWA입니다.
+일정, 할 일, 프로젝트, 운동, 가계부와 아침 푸시 알림을 제공하는 개인용 PWA입니다.
 
 ## 시작하기
 
@@ -10,7 +10,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`을 열고 샘플 로그인 정보로 화면을 확인할 수 있습니다. 현재 첫 버전은 UI와 로컬 상태로 동작하며 Supabase 연결은 다음 구현 단계에서 활성화합니다.
+브라우저에서 `http://localhost:3000`을 엽니다. Supabase를 연결하기 전 목업 화면을 확인하려면 `.env.local`에서 `NEXT_PUBLIC_ALLOW_DEMO_LOGIN=true`로 설정하세요. 운영 환경에서는 이 값을 반드시 `false`로 유지해야 합니다. 현재 데이터 화면은 로컬 상태로 동작하며, Supabase 영구 저장 연결은 다음 구현 단계입니다.
+
+계정 생성부터 테스트 배포까지는 [배포 가이드](docs/deployment.md)를 순서대로 따라가세요.
 
 ## 검증
 

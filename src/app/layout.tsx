@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Life Flow",
-  description: "일정, 할 일, 운동, 돈 관리를 한곳에서 관리하는 개인 PWA",
+  description: "일정, 할 일, 운동, 가계부를 한곳에서 관리하는 개인 PWA",
   applicationName: "Life Flow"
 };
 

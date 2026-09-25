@@ -92,11 +92,22 @@ export const initialWorkouts: Workout[] = [
 
 export const initialTransactions: Transaction[] = [
   {
+    id: "transaction-salary-august",
+    happenedAt: "2026-08-25T09:00",
+    name: "월급",
+    merchant: "회사",
+    amount: 4200000,
+    flow: "income",
+    category: "수입 › 급여",
+    account: "생활비 계좌"
+  },
+  {
     id: "transaction-lunch",
     happenedAt: "2026-08-26T12:31",
     name: "점심",
     merchant: "회사 근처 식당",
     amount: 12000,
+    flow: "expense",
     category: "소비 › 식비",
     account: "신한 신용카드"
   },
@@ -106,7 +117,38 @@ export const initialTransactions: Transaction[] = [
     name: "커피",
     merchant: "카페",
     amount: 5500,
+    flow: "expense",
     category: "소비 › 카페·간식",
     account: "국민 체크카드"
+  },
+  {
+    id: "transaction-salary-july",
+    happenedAt: "2026-07-25T09:00",
+    name: "월급",
+    merchant: "회사",
+    amount: 4100000,
+    flow: "income",
+    category: "수입 › 급여",
+    account: "생활비 계좌"
+  },
+  {
+    id: "transaction-rent-july",
+    happenedAt: "2026-07-05T10:00",
+    name: "월세",
+    merchant: "임대인",
+    amount: 850000,
+    flow: "expense",
+    category: "소비 › 주거",
+    account: "생활비 계좌"
+  },
+  {
+    id: "transaction-grocery-july",
+    happenedAt: "2026-07-18T18:40",
+    name: "장보기",
+    merchant: "마트",
+    amount: 164000,
+    flow: "expense",
+    category: "소비 › 식비",
+    account: "신한 신용카드"
   }
 ];
