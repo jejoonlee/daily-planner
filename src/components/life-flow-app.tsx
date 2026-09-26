@@ -326,13 +326,21 @@ export function LifeFlowApp() {
 
   function dropTaskAtPoint(clientX: number, clientY: number, taskId: string) {
     const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-task-date], [data-task-status]");
-    if (target?.dataset.taskDate) moveTaskToDate(target.dataset.taskDate, taskId);
+    const task = tasks.find((item) => item.id === taskId);
+    if (target?.dataset.taskDate === task?.scheduledDate || target?.dataset.taskStatus === task?.status) {
+      setMovingTaskId(null);
+      setDetailItem({ kind: "task", id: taskId });
+    } else if (target?.dataset.taskDate) moveTaskToDate(target.dataset.taskDate, taskId);
     else if (target?.dataset.taskStatus) moveTaskToStatus(target.dataset.taskStatus as TaskStatus, taskId);
   }
 
   function dropProjectAtPoint(clientX: number, clientY: number, projectId: string) {
     const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-project-status]");
-    if (target?.dataset.projectStatus) moveProjectToStatus(target.dataset.projectStatus as ProjectStatus, projectId);
+    const project = projects.find((item) => item.id === projectId);
+    if (target?.dataset.projectStatus === project?.status) {
+      setMovingProjectId(null);
+      setDetailItem({ kind: "project", id: projectId });
+    } else if (target?.dataset.projectStatus) moveProjectToStatus(target.dataset.projectStatus as ProjectStatus, projectId);
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
