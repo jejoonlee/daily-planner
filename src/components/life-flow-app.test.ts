@@ -26,7 +26,8 @@ describe("LifeFlowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
     fireEvent.click(screen.getByRole("button", { name: "칸반" }));
     fireEvent.click(screen.getByRole("button", { name: /와이어프레임 피드백 반영/ }));
-    fireEvent.click(screen.getByRole("button", { name: "할 일 수정" }));
+    expect(screen.getByRole("dialog", { name: "할 일 수정" })).toBeInTheDocument();
+    expect(screen.getByLabelText("할 일 제목")).toHaveValue("와이어프레임 피드백 반영");
     expect(screen.getByLabelText("우선순위")).toHaveValue("P2");
     expect(screen.getByLabelText("마감일")).toHaveValue("2026-08-27");
     fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "수정한 할 일" } });
@@ -67,6 +68,7 @@ describe("LifeFlowApp", () => {
     fireEvent.change(screen.getByLabelText("금액"), { target: { value: "-1" } });
     fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("alert")).toHaveTextContent("금액은 0원보다 커야 합니다.");
     fireEvent.change(screen.getByLabelText("금액"), { target: { value: "4300000" } });
     fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
     expect(screen.getByText("3건")).toBeInTheDocument();

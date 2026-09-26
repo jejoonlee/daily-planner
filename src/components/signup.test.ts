@@ -1,10 +1,10 @@
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LifeFlowApp } from "./life-flow-app";
 
 const auth = vi.hoisted(() => ({
-  getSession: vi.fn(), onAuthStateChange: vi.fn(), signUp: vi.fn(), signInWithPassword: vi.fn()
+  getSession: vi.fn(), onAuthStateChange: vi.fn(), signUp: vi.fn(), signInWithPassword: vi.fn(), resetPasswordForEmail: vi.fn(), updateUser: vi.fn()
 }));
 vi.mock("@/lib/supabase-client", () => ({
   hasSupabaseConfig: true,
@@ -13,11 +13,72 @@ vi.mock("@/lib/supabase-client", () => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.history.replaceState(null, "", "/");
   auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
   auth.onAuthStateChange.mockReturnValue({ data: { listener: null, subscription: { unsubscribe: vi.fn() } } });
   auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
 });
 afterEach(cleanup);
+
+it("재설정 메일 안내에서 계정 등록 여부를 노출하지 않는다", async () => {
+  auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+  render(createElement(LifeFlowApp));
+  fireEvent.click(await screen.findByRole("button", { name: "비밀번호 찾기" }));
+  fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "member@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "재설정 메일 보내기" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("등록된 이메일이면");
+  expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("member@example.com", { redirectTo: `${window.location.origin}/` });
+});
+
+it("재설정 메일 전송 오류를 성공으로 표시하지 않는다", async () => {
+  auth.resetPasswordForEmail.mockResolvedValue({ error: { status: 429 } });
+  render(createElement(LifeFlowApp));
+  fireEvent.click(await screen.findByRole("button", { name: "비밀번호 찾기" }));
+  fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "member@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "재설정 메일 보내기" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("잠시 기다린 뒤");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+it("복구 인증 이벤트는 새 비밀번호 화면을 열고 일치하는 값만 저장한다", async () => {
+  auth.updateUser.mockResolvedValue({ error: null });
+  render(createElement(LifeFlowApp));
+  await screen.findByRole("button", { name: "비밀번호 찾기" });
+  act(() => auth.onAuthStateChange.mock.calls[0][0]("PASSWORD_RECOVERY", { user: { id: "test-user" } }));
+  expect(screen.getByRole("heading", { name: "새 비밀번호 설정" })).toBeInTheDocument();
+  expect(window.location.hash).toBe("#reset-password");
+  fireEvent.change(screen.getByLabelText("새 비밀번호"), { target: { value: "NewPassword123!" } });
+  fireEvent.change(screen.getByLabelText("새 비밀번호 확인"), { target: { value: "Different123!" } });
+  fireEvent.click(screen.getByRole("button", { name: "비밀번호 변경" }));
+  expect(auth.updateUser).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("새 비밀번호 확인"), { target: { value: "NewPassword123!" } });
+  fireEvent.click(screen.getByRole("button", { name: "비밀번호 변경" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("비밀번호가 변경되었습니다.");
+  expect(auth.updateUser).toHaveBeenCalledWith({ password: "NewPassword123!" });
+  fireEvent.click(screen.getByRole("button", { name: "앱으로 돌아가기" }));
+  expect(window.location.hash).toBe("");
+});
+
+it("복구 세션 없이 재설정 주소를 열면 비밀번호 변경을 허용하지 않는다", async () => {
+  window.history.replaceState(null, "", "/#reset-password");
+  render(createElement(LifeFlowApp));
+  expect(await screen.findByRole("alert")).toHaveTextContent("재설정 링크가 만료되었습니다");
+  expect(screen.queryByLabelText("새 비밀번호")).not.toBeInTheDocument();
+  expect(auth.updateUser).not.toHaveBeenCalled();
+});
+
+it("인증된 복구 화면은 새로고침 후에도 유지되고 저장 실패 시 재시도할 수 있다", async () => {
+  window.history.replaceState(null, "", "/#reset-password");
+  auth.getSession.mockResolvedValue({ data: { session: { user: { id: "test-user" } } }, error: null });
+  auth.updateUser.mockResolvedValue({ error: { code: "same_password", status: 422 } });
+  render(createElement(LifeFlowApp));
+  fireEvent.change(await screen.findByLabelText("새 비밀번호"), { target: { value: "NewPassword123!" } });
+  fireEvent.change(screen.getByLabelText("새 비밀번호 확인"), { target: { value: "NewPassword123!" } });
+  fireEvent.click(screen.getByRole("button", { name: "비밀번호 변경" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("기존 비밀번호와 다른");
+  expect(screen.getByRole("button", { name: "비밀번호 변경" })).toBeEnabled();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
 
 async function fillSignup(confirm = "StrongPassword123!") {
   render(createElement(LifeFlowApp));
