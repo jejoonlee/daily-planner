@@ -861,7 +861,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
     onPointerDown={(event) => {
       if (event.button !== 0) return;
       pointerStart.current = { x: event.clientX, y: event.clientY };
-      if (onStartMove) longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
+      if (onStartMove && event.pointerType !== "mouse") longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
     }}
     onPointerMove={(event) => {
       if (!onStartMove) return;
@@ -1049,7 +1049,7 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
     onPointerDown={(event) => {
       if (event.button !== 0) return;
       pointerStart.current = { x: event.clientX, y: event.clientY };
-      longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
+      if (event.pointerType !== "mouse") longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
     }}
     onPointerMove={(event) => {
       if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 10) startPointerMove(event.pointerId);
