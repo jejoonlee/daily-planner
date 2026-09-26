@@ -235,12 +235,29 @@ input:focus, textarea:focus, select:focus, button:focus-visible { outline: 3px s
 .kanban-column { min-height: 260px; padding: 11px; border-radius: 11px; background: var(--surface-soft); }
 .project-card { width: 100%; display: grid; gap: 5px; margin-top: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); text-align: left; }
 .project-card span { color: var(--muted); font-size: 12px; }
+.project-card.moving { border-color: var(--accent); background: var(--surface-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 .detail-panel { margin-top: 14px; padding: 16px; border-left: 3px solid var(--accent); background: var(--surface-accent); }
+.detail-content { margin-top: 10px; }
 .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .detail-grid div { padding: 9px; background: var(--surface); }
 .detail-grid span, .description > span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
 .description { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .description p { margin: 0; }
+.detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.record-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.record-card { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--foreground); text-align: left; }
+.record-card:hover, .record-card:focus-visible, .transaction-card:hover, .transaction-card:focus-visible { border-color: var(--accent); background: var(--surface-accent); }
+.record-card > span, .record-card > small { color: var(--muted); }
+.record-card > span { font-size: 12px; }
+.record-card > small { font-size: 13px; }
+.transaction-card-list { display: grid; gap: 8px; }
+.transaction-card { width: 100%; display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--foreground); text-align: left; }
+.transaction-card > span:first-child, .transaction-card small { color: var(--muted); font-size: 12px; }
+.transaction-card > span:nth-child(2) { display: grid; gap: 3px; }
+.transaction-card > strong { font-variant-numeric: tabular-nums; }
+.transaction-card > strong.income, .detail-content .income { color: var(--success); }
+.transaction-card > strong.expense, .detail-content .expense { color: var(--danger); }
 
 .table-scroll { overflow-x: auto; }
 table { width: 100%; min-width: 670px; border-collapse: collapse; }
@@ -344,6 +361,8 @@ th { color: var(--muted); font-weight: 600; }
   .period-filter > span { display: none; }
   .period-filter input, .category-filter { width: 100%; }
   .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .transaction-card { grid-template-columns: 72px minmax(0, 1fr); }
+  .transaction-card > strong { grid-column: 2; }
   .modal-backdrop { padding: 10px; align-items: end; }
   .modal { max-height: calc(100svh - 20px); padding: 16px; border-radius: 16px 16px 0 0; }
   .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

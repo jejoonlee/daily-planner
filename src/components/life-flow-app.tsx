@@ -36,7 +36,15 @@ const statusLabel: Record<TaskStatus, string> = {
   done: "완료"
 };
 
+const projectStatusLabel: Record<ProjectStatus, string> = {
+  ready: "준비",
+  doing: "진행 중",
+  done: "완료"
+};
+
 const APP_TIME_ZONE = "Asia/Seoul";
+type ProjectStatus = Project["status"];
+type DetailItem = { kind: "task" | "workout" | "transaction"; id: string } | null;
 
 function authErrorMessage(code?: string, status?: number) {
   if (code === "email_not_confirmed") return "이메일 인증이 필요합니다. 가입 확인 메일의 인증 링크를 눌러 주세요.";
@@ -106,6 +114,10 @@ function monthEnd(value: string) {
   return `${value}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}`;
 }
 
+function dateTimeInMonth(month: string, day: number, time: string) {
+  return `${month}-${String(day).padStart(2, "0")}T${time}`;
+}
+
 function fullDateLabel(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return `${year}년 ${month}월 ${day}일`;
@@ -131,18 +143,38 @@ export function LifeFlowApp() {
   const [formError, setFormError] = useState("");
   const [page, setPage] = useState<PageName>("dashboard");
   const [modal, setModal] = useState<ModalName>(null);
+  const [detailItem, setDetailItem] = useState<DetailItem>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [projects, setProjects] = useState(initialProjects);
-  const [tasks, setTasks] = useState(initialTasks);
-  const [workouts, setWorkouts] = useState(initialWorkouts);
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTasks[0]?.id ?? null);
+  const [tasks, setTasks] = useState(() => {
+    const scheduledOffsets = [-2, -2, -1, 0];
+    const dueOffsets = [-2, -1, 0, 0];
+    return initialTasks.map((task, index) => ({
+      ...task,
+      scheduledDate: shiftDate(todayDate, scheduledOffsets[index] ?? 0),
+      dueDate: shiftDate(todayDate, dueOffsets[index] ?? 0)
+    }));
+  });
+  const [workouts, setWorkouts] = useState(() => initialWorkouts.map((workout, index) => ({ ...workout, startedAt: `${shiftDate(todayDate, -2 - index)}T19:00` })));
+  const [transactions, setTransactions] = useState(() => {
+    const previousMonth = shiftMonth(currentMonth, -1);
+    const dates = [
+      dateTimeInMonth(currentMonth, 25, "09:00"),
+      dateTimeInMonth(currentMonth, 26, "12:31"),
+      dateTimeInMonth(currentMonth, 25, "19:10"),
+      dateTimeInMonth(previousMonth, 25, "09:00"),
+      dateTimeInMonth(previousMonth, 5, "10:00"),
+      dateTimeInMonth(previousMonth, 18, "18:40")
+    ];
+    return initialTransactions.map((transaction, index) => ({ ...transaction, happenedAt: dates[index] ?? transaction.happenedAt }));
+  });
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjects[0]?.id ?? null);
   const [taskView, setTaskView] = useState<"week" | "month" | "kanban">("week");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [movingProjectId, setMovingProjectId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState(`${currentMonth}-01`);
   const [dateTo, setDateTo] = useState(() => monthEnd(currentMonth));
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -157,6 +189,8 @@ export function LifeFlowApp() {
     setFormError("");
     setIntakeParsed(false);
   }, []);
+
+  const closeDetail = useCallback(() => setDetailItem(null), []);
 
   useEffect(() => {
     const updateDate = () => setTodayDate((current) => {
@@ -225,8 +259,10 @@ export function LifeFlowApp() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const detailTask = detailItem?.kind === "task" ? tasks.find((task) => task.id === detailItem.id) : undefined;
+  const detailWorkout = detailItem?.kind === "workout" ? workouts.find((workout) => workout.id === detailItem.id) : undefined;
+  const detailTransaction = detailItem?.kind === "transaction" ? transactions.find((transaction) => transaction.id === detailItem.id) : undefined;
   const todayTasks = tasks.filter((task) => task.scheduledDate === todayDate && task.status !== "done");
 
   const projectById = useMemo(
@@ -268,7 +304,6 @@ export function LifeFlowApp() {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, scheduledDate: date } : task));
-    setSelectedTaskId(taskId);
     setMovingTaskId(null);
     setToast(`${displayDate(date)}로 할 일을 옮겼습니다.`);
   }
@@ -277,9 +312,17 @@ export function LifeFlowApp() {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status } : task));
-    setSelectedTaskId(taskId);
     setMovingTaskId(null);
     setToast(`‘${statusLabel[status]}’ 영역으로 옮겼습니다.`);
+  }
+
+  function moveProjectToStatus(status: ProjectStatus, draggedProjectId?: string) {
+    const projectId = draggedProjectId || movingProjectId;
+    if (!projectId) return;
+    setProjects((current) => current.map((project) => project.id === projectId ? { ...project, status } : project));
+    setSelectedProjectId(projectId);
+    setMovingProjectId(null);
+    setToast(`프로젝트를 ‘${projectStatusLabel[status]}’ 영역으로 옮겼습니다.`);
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -345,11 +388,29 @@ export function LifeFlowApp() {
     }
   }
 
+  function openTaskDetail(id: string) {
+    setDetailItem({ kind: "task", id });
+  }
+
   function editTask(id: string) {
-    setSelectedTaskId(id);
+    setDetailItem(null);
     setEditingId(id);
     setFormError("");
     setModal("task");
+  }
+
+  function editWorkout(id: string) {
+    setDetailItem(null);
+    setEditingId(id);
+    setFormError("");
+    setModal("workout");
+  }
+
+  function editTransaction(id: string) {
+    setDetailItem(null);
+    setEditingId(id);
+    setFormError("");
+    setModal("money");
   }
 
   function submitTask(event: FormEvent<HTMLFormElement>) {
@@ -373,7 +434,6 @@ export function LifeFlowApp() {
       estimatedMinutes: data.estimatedMinutes
     };
     setTasks((current) => editingId ? current.map((item) => item.id === editingId ? task : item) : [task, ...current]);
-    setSelectedTaskId(task.id);
     closeModal();
     setToast(editingId ? "할 일을 수정했습니다." : "새 할 일을 저장했습니다.");
   }
@@ -556,7 +616,7 @@ export function LifeFlowApp() {
                   <ListRow title="점심 약속" detail="개인 · 강남" value="12:30" />
                 </Panel>
                 <Panel title="오늘 할 일" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
-                  {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => { navigate("tasks"); editTask(task.id); }} />)}
+                  {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => { navigate("tasks"); openTaskDetail(task.id); }} />)}
                 </Panel>
                 <Panel title="오늘 운동" action={<button className="text-button" onClick={() => navigate("workouts")}>상세</button>}>
                   {workouts.slice(0, 1).map((workout) => <ListRow key={workout.id} title={workout.title} detail={`${workout.place} · ${workout.durationMinutes}분`} value="19:00" />)}
@@ -591,7 +651,8 @@ export function LifeFlowApp() {
                   <div><h2>프로젝트</h2><p>프로젝트 진행 상태와 상세 내용을 먼저 확인하세요.</p></div>
                   <span>{projects.length}개</span>
                 </div>
-                <ProjectKanban projects={projects} onSelect={setSelectedProjectId} />
+                {movingProjectId && <div className="move-hint" role="status"><span>프로젝트를 옮길 영역을 선택하세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
+                <ProjectKanban projects={projects} onSelect={setSelectedProjectId} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} />
                 {selectedProject && <ProjectDetail project={selectedProject} />}
               </div>
               <div className="section-heading task-list-heading">
@@ -629,25 +690,24 @@ export function LifeFlowApp() {
                   </div>
                 ) : <span>전체 할 일</span>}
               </div>
-              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={editTask} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
-              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={editTask} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
-              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={editTask} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} />}
-              {selectedTask && <><button className="secondary-button" onClick={() => { setEditingId(selectedTask.id); setModal("task"); }}>할 일 수정</button><TaskDetail task={selectedTask} project={selectedTask.projectId ? projectById[selectedTask.projectId] : undefined} /></>}
+              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
+              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
+              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} />}
             </section>
           )}
 
           {page === "workouts" && (
             <section>
-              <PageHeading title="운동 관리" description="기록의 수정 버튼을 눌러 운동 정보와 세트 내용을 변경하세요." actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
-              <div className="dashboard-grid">
-                {workouts.map((workout) => <Panel key={workout.id} title={workout.title} meta={displayDate(workout.startedAt)} action={<button className="secondary-button" aria-label={`${workout.title} 수정`} onClick={() => { setEditingId(workout.id); setModal("workout"); }}>수정</button>}><p className="record-copy">{displayDate(workout.startedAt)} · {workout.place} · {workout.durationMinutes}분</p><p className="record-copy">{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</p></Panel>)}
+              <PageHeading title="운동 관리" description="운동 카드를 누르면 상세 내용을 확인할 수 있습니다." actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
+              <div className="record-card-grid">
+                {workouts.map((workout) => <button type="button" className="record-card" key={workout.id} onClick={() => setDetailItem({ kind: "workout", id: workout.id })}><span>{displayDate(workout.startedAt)}</span><strong>{workout.title}</strong><small>{workout.place} · {workout.durationMinutes}분</small><small>{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</small></button>)}
               </div>
             </section>
           )}
 
           {page === "money" && (
             <section>
-              <PageHeading title="가계부" description="거래 내역의 제목 또는 수정 버튼을 눌러 내용을 변경하세요." actions={<button className="primary-button" onClick={() => setModal("money")}>+ 거래 등록</button>} />
+              <PageHeading title="가계부" description="거래 카드를 누르면 상세 내용을 확인할 수 있습니다." actions={<button className="primary-button" onClick={() => setModal("money")}>+ 거래 등록</button>} />
               <div className="money-summary-grid">
                 <MoneySummary title="전월 잔액" value={monthlyMoney.previous.net} detail={`수입 ${won(monthlyMoney.previous.income)} · 지출 ${won(monthlyMoney.previous.expense)}`} />
                 <MoneySummary title="이번 달 잔액" value={monthlyMoney.current.net} detail={`수입 ${won(monthlyMoney.current.income)} · 지출 ${won(monthlyMoney.current.expense)}`} />
@@ -669,7 +729,7 @@ export function LifeFlowApp() {
                 </details>
               </div>
               <Panel title="거래 내역" meta={`${filteredTransactions.length}건`}>
-                <div className="table-scroll"><table><thead><tr><th>수정</th><th>일시</th><th>내역</th><th>사용처</th><th>흐름</th><th>카테고리</th><th className="number">금액</th></tr></thead><tbody>{filteredTransactions.map((transaction) => <tr key={transaction.id}><td><button className="secondary-button" aria-label={`${transaction.name} 수정`} onClick={() => { setEditingId(transaction.id); setModal("money"); }}>수정</button></td><td>{displayDate(transaction.happenedAt)}</td><td><button className="text-button" onClick={() => { setEditingId(transaction.id); setModal("money"); }}>{transaction.name}</button></td><td>{transaction.merchant}</td><td>{transaction.flow === "income" ? "수입" : "지출"}</td><td>{transaction.category}</td><td className={`number ${transaction.flow}`}>{signedWon(transactionValue(transaction))}</td></tr>)}</tbody></table></div>
+                <div className="transaction-card-list">{filteredTransactions.map((transaction) => <button type="button" className="transaction-card" key={transaction.id} onClick={() => setDetailItem({ kind: "transaction", id: transaction.id })}><span>{displayDate(transaction.happenedAt)}</span><span><strong>{transaction.name}</strong><small>{transaction.merchant} · {transaction.category}</small></span><strong className={transaction.flow}>{signedWon(transactionValue(transaction))}</strong></button>)}</div>
               </Panel>
             </section>
           )}
@@ -689,6 +749,19 @@ export function LifeFlowApp() {
           )}
         </div>
       </main>
+
+      {detailTask && <EntryModal title={detailTask.title} description="할 일 상세 내용" onClose={closeDetail}>
+        <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
+        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTask(detailTask.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+      </EntryModal>}
+      {detailWorkout && <EntryModal title={detailWorkout.title} description="운동 상세 내용" onClose={closeDetail}>
+        <WorkoutDetail workout={detailWorkout} />
+        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editWorkout(detailWorkout.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+      </EntryModal>}
+      {detailTransaction && <EntryModal title={detailTransaction.name} description="가계부 상세 내용" onClose={closeDetail}>
+        <TransactionDetail transaction={detailTransaction} />
+        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTransaction(detailTransaction.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+      </EntryModal>}
 
       {modal && (
         <EntryModal title={editingId ? `${pageTitles[page]} 수정` : modalTitle(modal)} description={modalDescription(modal)} onClose={closeModal}>
@@ -763,6 +836,10 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, moving = false }: {
 
 function draggedTaskId(event: React.DragEvent<HTMLElement>) {
   return event.dataTransfer.getData("text/plain") || undefined;
+}
+
+function draggedProjectId(event: React.DragEvent<HTMLElement>) {
+  return event.dataTransfer.getData("application/x-life-flow-project") || undefined;
 }
 
 function activateMoveTarget(event: React.KeyboardEvent<HTMLElement>, move: () => void) {
@@ -847,12 +924,48 @@ function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onM
 }
 
 function TaskDetail({ task, project }: { task: Task; project?: Project }) {
-  return <aside className="detail-panel"><strong>{task.title}</strong><div className="detail-grid"><div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></aside>;
+  return <div className="detail-content"><div className="detail-grid"><div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div><div><span>상태</span><strong>{statusLabel[task.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>예정일</span><strong>{displayDate(task.scheduledDate)}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></div>;
 }
 
-function ProjectKanban({ projects, onSelect }: { projects: Project[]; onSelect: (id: string) => void }) {
-  const labels = { ready: "준비", doing: "진행 중", done: "완료" } as const;
-  return <div className="kanban">{(["ready", "doing", "done"] as const).map((status) => <div className="kanban-column" key={status}><strong>{labels[status]}</strong>{projects.filter((project) => project.status === status).map((project) => <button className="project-card" key={project.id} onClick={() => onSelect(project.id)}><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>)}</div>)}</div>;
+function WorkoutDetail({ workout }: { workout: Workout }) {
+  return <div className="detail-content"><div className="detail-grid"><div><span>운동 일시</span><strong>{workout.startedAt.replace("T", " ")}</strong></div><div><span>장소</span><strong>{workout.place}</strong></div><div><span>운동 시간</span><strong>{workout.durationMinutes}분</strong></div><div><span>운동 종목</span><strong>{workout.exercise}</strong></div><div><span>세트 × 횟수</span><strong>{workout.sets}세트 × {workout.reps}회</strong></div><div><span>중량</span><strong>{workout.weightKg}kg</strong></div></div></div>;
+}
+
+function TransactionDetail({ transaction }: { transaction: Transaction }) {
+  return <div className="detail-content"><div className="detail-grid"><div><span>거래 일시</span><strong>{transaction.happenedAt.replace("T", " ")}</strong></div><div><span>수입 / 지출</span><strong>{transaction.flow === "income" ? "수입" : "지출"}</strong></div><div><span>금액</span><strong className={transaction.flow}>{signedWon(transactionValue(transaction))}</strong></div><div><span>사용처</span><strong>{transaction.merchant}</strong></div><div><span>카테고리</span><strong>{transaction.category}</strong></div><div><span>금융 계좌</span><strong>{transaction.account}</strong></div></div></div>;
+}
+
+function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEndMove, onMoveToStatus }: {
+  projects: Project[];
+  onSelect: (id: string) => void;
+  movingProjectId: string | null;
+  onStartMove: (id: string) => void;
+  onEndMove: () => void;
+  onMoveToStatus: (status: ProjectStatus, projectId?: string) => void;
+}) {
+  return <div className="kanban project-kanban">{(["ready", "doing", "done"] as ProjectStatus[]).map((status) => <div
+    className={`kanban-column${movingProjectId ? " drop-target" : ""}`}
+    key={status}
+    role="group"
+    aria-label={`프로젝트 ${projectStatusLabel[status]} 영역`}
+    tabIndex={movingProjectId ? 0 : undefined}
+    onClick={() => { if (movingProjectId) onMoveToStatus(status); }}
+    onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
+    onDragOver={(event) => event.preventDefault()}
+    onDrop={(event) => { event.preventDefault(); onMoveToStatus(status, draggedProjectId(event)); }}
+  ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <button
+    type="button"
+    className={movingProjectId === project.id ? "project-card moving" : "project-card"}
+    key={project.id}
+    draggable
+    aria-pressed={movingProjectId === project.id || undefined}
+    aria-keyshortcuts="Alt+M"
+    title="드래그하거나 Alt+M으로 이동"
+    onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}
+    onKeyDown={(event) => { if (event.altKey && event.key.toLowerCase() === "m") { event.preventDefault(); event.stopPropagation(); onStartMove(project.id); } }}
+    onDragStart={(event) => { event.dataTransfer.setData("application/x-life-flow-project", project.id); event.dataTransfer.effectAllowed = "move"; onStartMove(project.id); }}
+    onDragEnd={onEndMove}
+  ><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>)}</div>)}</div>;
 }
 
 function ProjectDetail({ project }: { project: Project }) {

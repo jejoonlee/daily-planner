@@ -26,6 +26,8 @@ describe("LifeFlowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
     fireEvent.click(screen.getByRole("button", { name: "칸반" }));
     fireEvent.click(screen.getByRole("button", { name: /와이어프레임 피드백 반영/ }));
+    expect(screen.getByRole("dialog", { name: "와이어프레임 피드백 반영" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByRole("dialog", { name: "할 일 수정" })).toBeInTheDocument();
     expect(screen.getByLabelText("할 일 제목")).toHaveValue("와이어프레임 피드백 반영");
     expect(screen.getByLabelText("우선순위")).toHaveValue("P2");
@@ -33,7 +35,8 @@ describe("LifeFlowApp", () => {
     fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "수정한 할 일" } });
     fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
     expect(within(screen.getByRole("group", { name: "진행 중 영역" })).getByRole("button", { name: /수정한 할 일/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "할 일 수정" }));
+    fireEvent.click(screen.getByRole("button", { name: /수정한 할 일/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByLabelText("마감일")).toHaveValue("2026-08-27");
     fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "취소할 제목" } });
     fireEvent.click(screen.getByRole("button", { name: "취소" }));
@@ -44,13 +47,16 @@ describe("LifeFlowApp", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "운동" }));
-    fireEvent.click(screen.getByRole("button", { name: "하체 근력 운동 수정" }));
+    fireEvent.click(screen.getByRole("button", { name: /하체 근력 운동/ }));
+    expect(screen.getByRole("dialog", { name: "하체 근력 운동" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByLabelText("중량(kg)")).toHaveValue(80);
     fireEvent.change(screen.getByLabelText("운동명"), { target: { value: "수정 운동" } });
     fireEvent.change(screen.getByLabelText("중량(kg)"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
-    expect(screen.getAllByRole("button", { name: /수정$/ })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "수정 운동 수정" }));
+    expect(screen.getAllByRole("button", { name: /수정 운동/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /수정 운동/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByLabelText("중량(kg)")).toHaveValue(0);
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "+ 운동 기록" }));
@@ -62,7 +68,9 @@ describe("LifeFlowApp", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "가계부" }));
-    fireEvent.click(screen.getByRole("button", { name: "월급 수정" }));
+    fireEvent.click(screen.getByRole("button", { name: /월급/ }));
+    expect(screen.getByRole("dialog", { name: "월급" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByLabelText("수입 / 지출")).toHaveValue("income");
     expect(screen.getByLabelText("금융 계좌")).toHaveValue("생활비 계좌");
     fireEvent.change(screen.getByLabelText("금액"), { target: { value: "-1" } });
@@ -73,7 +81,8 @@ describe("LifeFlowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
     expect(screen.getByText("3건")).toBeInTheDocument();
     expect(within(screen.getByText("이번 달 잔액").closest("article")!).getByText("+4,282,500원")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "월급 수정" }));
+    fireEvent.click(screen.getByRole("button", { name: /월급/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
     expect(screen.getByLabelText("금융 계좌")).toHaveValue("생활비 계좌");
   });
 
@@ -96,6 +105,7 @@ describe("LifeFlowApp", () => {
 
     expect(screen.getByRole("grid", { name: "2026년 8월 할 일 달력" })).toBeInTheDocument();
     expect(screen.getByRole("gridcell", { name: "2026년 8월 31일" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /병원 예약하기/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "이전 달" }));
 
@@ -155,6 +165,25 @@ describe("LifeFlowApp", () => {
     expect(within(screen.getByRole("group", { name: "완료 영역" })).getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
   });
 
+  it("프로젝트 카드를 다른 진행 상태로 드래그한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+
+    const project = screen.getByRole("button", { name: /여행 계획/ });
+    const values = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => values.set(type, value),
+      getData: (type: string) => values.get(type) ?? "",
+      effectAllowed: "move"
+    };
+    fireEvent.dragStart(project, { dataTransfer });
+    const doing = screen.getByRole("group", { name: "프로젝트 진행 중 영역" });
+    fireEvent.drop(doing, { dataTransfer });
+
+    expect(within(doing).getByRole("button", { name: /여행 계획/ })).toBeInTheDocument();
+  });
+
   it("현재 날짜가 바뀌면 가계부의 월별 요약과 기본 기간도 함께 바뀐다", () => {
     vi.setSystemTime(new Date("2026-09-02T09:00:00+09:00"));
     render(createElement(LifeFlowApp));
@@ -163,8 +192,8 @@ describe("LifeFlowApp", () => {
 
     expect(screen.getByLabelText("시작일")).toHaveValue("2026-09-01");
     expect(screen.getByLabelText("종료일")).toHaveValue("2026-09-30");
-    expect(within(screen.getByText("전월 잔액").closest("article")!).getByText("+4,182,500원")).toBeInTheDocument();
-    expect(within(screen.getByText("이번 달 잔액").closest("article")!).getByText("0원")).toBeInTheDocument();
+    expect(within(screen.getByText("전월 잔액").closest("article")!).getByText("+3,086,000원")).toBeInTheDocument();
+    expect(within(screen.getByText("이번 달 잔액").closest("article")!).getByText("+4,182,500원")).toBeInTheDocument();
   });
 
   it("연도 선택 범위를 벗어나 달을 이동해도 선택값과 달력을 유지한다", () => {
