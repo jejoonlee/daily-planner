@@ -44,7 +44,7 @@ const projectStatusLabel: Record<ProjectStatus, string> = {
 
 const APP_TIME_ZONE = "Asia/Seoul";
 type ProjectStatus = Project["status"];
-type DetailItem = { kind: "task" | "workout" | "transaction"; id: string } | null;
+type DetailItem = { kind: "project" | "task" | "workout" | "transaction"; id: string } | null;
 
 function authErrorMessage(code?: string, status?: number) {
   if (code === "email_not_confirmed") return "이메일 인증이 필요합니다. 가입 확인 메일의 인증 링크를 눌러 주세요.";
@@ -169,7 +169,6 @@ export function LifeFlowApp() {
     ];
     return initialTransactions.map((transaction, index) => ({ ...transaction, happenedAt: dates[index] ?? transaction.happenedAt }));
   });
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjects[0]?.id ?? null);
   const [taskView, setTaskView] = useState<"week" | "month" | "kanban">("week");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
@@ -259,7 +258,7 @@ export function LifeFlowApp() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const detailProject = detailItem?.kind === "project" ? projects.find((project) => project.id === detailItem.id) : undefined;
   const detailTask = detailItem?.kind === "task" ? tasks.find((task) => task.id === detailItem.id) : undefined;
   const detailWorkout = detailItem?.kind === "workout" ? workouts.find((workout) => workout.id === detailItem.id) : undefined;
   const detailTransaction = detailItem?.kind === "transaction" ? transactions.find((transaction) => transaction.id === detailItem.id) : undefined;
@@ -298,6 +297,7 @@ export function LifeFlowApp() {
   function navigate(nextPage: PageName) {
     setPage(nextPage);
     closeModal();
+    closeDetail();
   }
 
   function moveTaskToDate(date: string, draggedTaskId?: string) {
@@ -320,9 +320,19 @@ export function LifeFlowApp() {
     const projectId = draggedProjectId || movingProjectId;
     if (!projectId) return;
     setProjects((current) => current.map((project) => project.id === projectId ? { ...project, status } : project));
-    setSelectedProjectId(projectId);
     setMovingProjectId(null);
     setToast(`프로젝트를 ‘${projectStatusLabel[status]}’ 영역으로 옮겼습니다.`);
+  }
+
+  function dropTaskAtPoint(clientX: number, clientY: number, taskId: string) {
+    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-task-date], [data-task-status]");
+    if (target?.dataset.taskDate) moveTaskToDate(target.dataset.taskDate, taskId);
+    else if (target?.dataset.taskStatus) moveTaskToStatus(target.dataset.taskStatus as TaskStatus, taskId);
+  }
+
+  function dropProjectAtPoint(clientX: number, clientY: number, projectId: string) {
+    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-project-status]");
+    if (target?.dataset.projectStatus) moveProjectToStatus(target.dataset.projectStatus as ProjectStatus, projectId);
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -456,7 +466,6 @@ export function LifeFlowApp() {
       dueDate: data.dueDate
     };
     setProjects((current) => [project, ...current]);
-    setSelectedProjectId(project.id);
     closeModal();
     setToast("새 프로젝트를 저장했습니다.");
   }
@@ -630,7 +639,7 @@ export function LifeFlowApp() {
               <Panel title="진행 중 프로젝트" className="wide-panel" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
                 <div className="project-summary-grid">
                   {projects.filter((project) => project.status === "doing").map((project) => (
-                    <button key={project.id} className="project-summary" onClick={() => { setSelectedProjectId(project.id); navigate("tasks"); }}>
+                    <button key={project.id} className="project-summary" onClick={() => navigate("tasks")}>
                       <strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {displayDate(project.dueDate)}</span><span className="progress"><i style={{ width: `${project.progress}%` }} /></span>
                     </button>
                   ))}
@@ -652,8 +661,7 @@ export function LifeFlowApp() {
                   <span>{projects.length}개</span>
                 </div>
                 {movingProjectId && <div className="move-hint" role="status"><span>프로젝트를 옮길 영역을 선택하세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
-                <ProjectKanban projects={projects} onSelect={setSelectedProjectId} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} />
-                {selectedProject && <ProjectDetail project={selectedProject} />}
+                <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} onPointerDrop={dropProjectAtPoint} />
               </div>
               <div className="section-heading task-list-heading">
                 <div><h2>할 일 보기</h2><p>선택한 기간이나 진행 상태에 따라 할 일을 확인합니다.</p></div>
@@ -690,9 +698,9 @@ export function LifeFlowApp() {
                   </div>
                 ) : <span>전체 할 일</span>}
               </div>
-              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
-              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} />}
-              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} />}
+              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} onPointerDrop={dropTaskAtPoint} />}
             </section>
           )}
 
@@ -750,6 +758,10 @@ export function LifeFlowApp() {
         </div>
       </main>
 
+      {detailProject && <EntryModal title={detailProject.name} description="프로젝트 상세 내용" onClose={closeDetail}>
+        <ProjectDetail project={detailProject} />
+        <div className="detail-actions"><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+      </EntryModal>}
       {detailTask && <EntryModal title={detailTask.title} description="할 일 상세 내용" onClose={closeDetail}>
         <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
         <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTask(detailTask.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
@@ -799,20 +811,41 @@ function MoneySummary({ title, value, detail, comparison = false }: { title: str
   return <article className="money-summary"><span>{title}</span><strong className={tone}>{signedWon(value)}</strong><small>{detail}</small></article>;
 }
 
-function TaskButton({ task, onClick, onStartMove, onEndMove, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; moving?: boolean }) {
+type PointerDrop = (clientX: number, clientY: number, id: string) => void;
+
+function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; onPointerDrop?: PointerDrop; moving?: boolean }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const longPressTimer = useRef<number | null>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
+  const pointerDragging = useRef(false);
+  const suppressClick = useRef(false);
 
   function cancelLongPress() {
     if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
     longPressTimer.current = null;
   }
 
+  function startPointerMove(pointerId: number) {
+    if (!onStartMove || pointerDragging.current) return;
+    pointerDragging.current = true;
+    suppressClick.current = true;
+    buttonRef.current?.setPointerCapture?.(pointerId);
+    onStartMove(task.id);
+  }
+
   return <button
+    ref={buttonRef}
     type="button"
-    className={moving ? "task-button moving" : "task-button"}
-    onClick={(event) => { event.stopPropagation(); onClick(); }}
-    draggable={Boolean(onStartMove)}
+    className={moving ? "task-button draggable-card moving" : "task-button draggable-card"}
+    onClick={(event) => {
+      event.stopPropagation();
+      if (suppressClick.current) {
+        suppressClick.current = false;
+        return;
+      }
+      onClick();
+    }}
+    draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts={onStartMove ? "Alt+M" : undefined}
     title={onStartMove ? "드래그하거나 길게 누르기, 또는 Alt+M으로 이동" : undefined}
@@ -825,11 +858,23 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, moving = false }: {
     }}
     onDragStart={(event) => { event.dataTransfer.setData("text/plain", task.id); event.dataTransfer.effectAllowed = "move"; onStartMove?.(task.id); }}
     onDragEnd={onEndMove}
-    onPointerDown={(event) => { pointerStart.current = { x: event.clientX, y: event.clientY }; if (onStartMove) longPressTimer.current = window.setTimeout(() => onStartMove(task.id), 550); }}
-    onPointerMove={(event) => { if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 8) cancelLongPress(); }}
-    onPointerUp={cancelLongPress}
-    onPointerCancel={cancelLongPress}
-    onPointerLeave={cancelLongPress}
+    onPointerDown={(event) => {
+      if (event.button !== 0) return;
+      pointerStart.current = { x: event.clientX, y: event.clientY };
+      if (onStartMove) longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
+    }}
+    onPointerMove={(event) => {
+      if (!onStartMove) return;
+      if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 10) startPointerMove(event.pointerId);
+    }}
+    onPointerUp={(event) => {
+      cancelLongPress();
+      if (!pointerDragging.current) return;
+      pointerDragging.current = false;
+      buttonRef.current?.releasePointerCapture?.(event.pointerId);
+      onPointerDrop?.(event.clientX, event.clientY, task.id);
+    }}
+    onPointerCancel={() => { cancelLongPress(); pointerDragging.current = false; onEndMove?.(); }}
     onContextMenu={(event) => { if (onStartMove) event.preventDefault(); }}
   ><span>{task.title}</span><em>{task.priority}</em></button>;
 }
@@ -853,25 +898,27 @@ type CalendarMoveProps = {
   onStartMove: (id: string) => void;
   onEndMove: () => void;
   onMoveToDate: (date: string, taskId?: string) => void;
+  onPointerDrop: PointerDrop;
 };
 
-function WeekView({ weekStart, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate }: { weekStart: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
+function WeekView({ weekStart, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate, onPointerDrop }: { weekStart: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
   const dates = Array.from({ length: 7 }, (_, index) => shiftDate(weekStart, index));
   return <div className="week-grid">{dates.map((date, index) => {
     const day = Number(date.slice(-2));
     return <div
       className={`${date === todayDate ? "day-column today" : "day-column"}${movingTaskId ? " drop-target" : ""}`}
       key={date}
+      data-task-date={date}
       tabIndex={movingTaskId ? 0 : undefined}
       onClick={() => onMoveToDate(date)}
       onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => { event.preventDefault(); onMoveToDate(date, draggedTaskId(event)); }}
-    ><strong>{["월", "화", "수", "목", "금", "토", "일"][index]} {day}</strong>{tasks.filter((task) => task.scheduledDate === date).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onClick={() => onSelect(task.id)} />)}</div>;
+    ><strong>{["월", "화", "수", "목", "금", "토", "일"][index]} {day}</strong>{tasks.filter((task) => task.scheduledDate === date).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
   })}</div>;
 }
 
-function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate }: { month: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
+function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate, onPointerDrop }: { month: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
   const [year, monthNumber] = month.split("-").map(Number);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const leadingEmptyDays = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
@@ -896,12 +943,13 @@ function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMov
               role="gridcell"
               aria-label={`${monthLabel(month)} ${day}일`}
               key={date}
+              data-task-date={date}
               tabIndex={movingTaskId ? 0 : undefined}
               onClick={() => onMoveToDate(date)}
               onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => { event.preventDefault(); onMoveToDate(date, draggedTaskId(event)); }}
-            ><time dateTime={date}>{day}</time>{dayTasks.map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onClick={() => onSelect(task.id)} />)}</div>;
+            ><time dateTime={date}>{day}</time>{dayTasks.map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
           })}
         </div>)}
       </div>
@@ -909,10 +957,11 @@ function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMov
   );
 }
 
-function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToStatus }: { tasks: Task[]; onSelect: (id: string) => void; movingTaskId: string | null; onStartMove: (id: string) => void; onEndMove: () => void; onMoveToStatus: (status: TaskStatus, taskId?: string) => void }) {
+function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToStatus, onPointerDrop }: { tasks: Task[]; onSelect: (id: string) => void; movingTaskId: string | null; onStartMove: (id: string) => void; onEndMove: () => void; onMoveToStatus: (status: TaskStatus, taskId?: string) => void; onPointerDrop: PointerDrop }) {
   return <div className="kanban">{(["todo", "doing", "done"] as TaskStatus[]).map((status) => <div
     className={`kanban-column${movingTaskId ? " drop-target" : ""}`}
     key={status}
+    data-task-status={status}
     role="group"
     aria-label={`${statusLabel[status]} 영역`}
     tabIndex={movingTaskId ? 0 : undefined}
@@ -920,7 +969,7 @@ function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onM
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
     onDragOver={(event) => event.preventDefault()}
     onDrop={(event) => { event.preventDefault(); onMoveToStatus(status, draggedTaskId(event)); }}
-  ><strong>{statusLabel[status]} · {tasks.filter((task) => task.status === status).length}</strong>{tasks.filter((task) => task.status === status).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onClick={() => onSelect(task.id)} />)}</div>)}</div>;
+  ><strong>{statusLabel[status]} · {tasks.filter((task) => task.status === status).length}</strong>{tasks.filter((task) => task.status === status).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>)}</div>;
 }
 
 function TaskDetail({ task, project }: { task: Task; project?: Project }) {
@@ -935,17 +984,19 @@ function TransactionDetail({ transaction }: { transaction: Transaction }) {
   return <div className="detail-content"><div className="detail-grid"><div><span>거래 일시</span><strong>{transaction.happenedAt.replace("T", " ")}</strong></div><div><span>수입 / 지출</span><strong>{transaction.flow === "income" ? "수입" : "지출"}</strong></div><div><span>금액</span><strong className={transaction.flow}>{signedWon(transactionValue(transaction))}</strong></div><div><span>사용처</span><strong>{transaction.merchant}</strong></div><div><span>카테고리</span><strong>{transaction.category}</strong></div><div><span>금융 계좌</span><strong>{transaction.account}</strong></div></div></div>;
 }
 
-function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEndMove, onMoveToStatus }: {
+function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEndMove, onMoveToStatus, onPointerDrop }: {
   projects: Project[];
   onSelect: (id: string) => void;
   movingProjectId: string | null;
   onStartMove: (id: string) => void;
   onEndMove: () => void;
   onMoveToStatus: (status: ProjectStatus, projectId?: string) => void;
+  onPointerDrop: PointerDrop;
 }) {
   return <div className="kanban project-kanban">{(["ready", "doing", "done"] as ProjectStatus[]).map((status) => <div
     className={`kanban-column${movingProjectId ? " drop-target" : ""}`}
     key={status}
+    data-project-status={status}
     role="group"
     aria-label={`프로젝트 ${projectStatusLabel[status]} 영역`}
     tabIndex={movingProjectId ? 0 : undefined}
@@ -953,23 +1004,70 @@ function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEnd
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
     onDragOver={(event) => event.preventDefault()}
     onDrop={(event) => { event.preventDefault(); onMoveToStatus(status, draggedProjectId(event)); }}
-  ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <button
+  ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <ProjectCard key={project.id} project={project} moving={movingProjectId === project.id} onSelect={onSelect} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} />)}</div>)}</div>;
+}
+
+function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPointerDrop }: { project: Project; moving: boolean; onSelect: (id: string) => void; onStartMove: (id: string) => void; onEndMove: () => void; onPointerDrop: PointerDrop }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const pointerStart = useRef({ x: 0, y: 0 });
+  const pointerDragging = useRef(false);
+  const suppressClick = useRef(false);
+
+  function cancelLongPress() {
+    if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
+
+  function startPointerMove(pointerId: number) {
+    if (pointerDragging.current) return;
+    pointerDragging.current = true;
+    suppressClick.current = true;
+    buttonRef.current?.setPointerCapture?.(pointerId);
+    onStartMove(project.id);
+  }
+
+  return <button
+    ref={buttonRef}
     type="button"
-    className={movingProjectId === project.id ? "project-card moving" : "project-card"}
-    key={project.id}
-    draggable
-    aria-pressed={movingProjectId === project.id || undefined}
+    className={moving ? "project-card draggable-card moving" : "project-card draggable-card"}
+    draggable={false}
+    aria-pressed={moving || undefined}
     aria-keyshortcuts="Alt+M"
-    title="드래그하거나 Alt+M으로 이동"
-    onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}
+    title="드래그하거나 길게 누른 뒤 이동"
+    onClick={(event) => {
+      event.stopPropagation();
+      if (suppressClick.current) {
+        suppressClick.current = false;
+        return;
+      }
+      onSelect(project.id);
+    }}
     onKeyDown={(event) => { if (event.altKey && event.key.toLowerCase() === "m") { event.preventDefault(); event.stopPropagation(); onStartMove(project.id); } }}
     onDragStart={(event) => { event.dataTransfer.setData("application/x-life-flow-project", project.id); event.dataTransfer.effectAllowed = "move"; onStartMove(project.id); }}
     onDragEnd={onEndMove}
-  ><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>)}</div>)}</div>;
+    onPointerDown={(event) => {
+      if (event.button !== 0) return;
+      pointerStart.current = { x: event.clientX, y: event.clientY };
+      longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
+    }}
+    onPointerMove={(event) => {
+      if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 10) startPointerMove(event.pointerId);
+    }}
+    onPointerUp={(event) => {
+      cancelLongPress();
+      if (!pointerDragging.current) return;
+      pointerDragging.current = false;
+      buttonRef.current?.releasePointerCapture?.(event.pointerId);
+      onPointerDrop(event.clientX, event.clientY, project.id);
+    }}
+    onPointerCancel={() => { cancelLongPress(); pointerDragging.current = false; onEndMove(); }}
+    onContextMenu={(event) => event.preventDefault()}
+  ><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>;
 }
 
 function ProjectDetail({ project }: { project: Project }) {
-  return <aside className="detail-panel"><strong>{project.name}</strong><div className="detail-grid"><div><span>우선순위</span><strong>{priorityLabel[project.priority]}</strong></div><div><span>진행률</span><strong>{project.progress}%</strong></div><div><span>목표 완료일</span><strong>{displayDate(project.dueDate)}</strong></div></div><div className="description"><span>프로젝트 설명</span><p>{project.description}</p></div></aside>;
+  return <div className="detail-content"><div className="detail-grid"><div><span>상태</span><strong>{projectStatusLabel[project.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[project.priority]}</strong></div><div><span>진행률</span><strong>{project.progress}%</strong></div><div><span>목표 완료일</span><strong>{displayDate(project.dueDate)}</strong></div></div><div className="description"><span>프로젝트 설명</span><p>{project.description}</p></div></div>;
 }
 
 function EntryModal({ title, description, onClose, children }: { title: string; description: string; onClose: () => void; children: React.ReactNode }) {
@@ -980,8 +1078,9 @@ function EntryModal({ title, description, onClose, children }: { title: string; 
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const modal = modalRef.current;
+    const isMobile = window.matchMedia?.("(max-width: 620px)").matches ?? false;
     const initialFocus = modal?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), select:not([disabled])")
-      ?? modal?.querySelector<HTMLElement>("button:not([disabled])");
+      ?? modal?.querySelector<HTMLElement>(isMobile ? ".modal-back-button" : ".close-button");
     initialFocus?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -1008,14 +1107,17 @@ function EntryModal({ title, description, onClose, children }: { title: string; 
       }
     }
 
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
       previouslyFocused?.focus();
     };
   }, [onClose]);
 
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}><div className="modal-heading"><div><h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p></div><button type="button" className="close-button" onClick={onClose} aria-label="닫기">×</button></div>{children}</div></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}><div className="modal-heading"><button type="button" className="modal-back-button" onClick={onClose} aria-label="뒤로가기"><span aria-hidden="true">‹</span> 뒤로</button><div className="modal-heading-copy"><h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p></div><button type="button" className="close-button" onClick={onClose} aria-label="닫기">×</button></div>{children}</div></div>;
 }
 
 function ModalActions({ submitLabel }: { submitLabel: string }) {

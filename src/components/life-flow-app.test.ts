@@ -170,6 +170,11 @@ describe("LifeFlowApp", () => {
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
 
+    fireEvent.click(screen.getByRole("button", { name: /여행 계획/ }));
+    expect(screen.getByRole("dialog", { name: "여행 계획" })).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("프로젝트 설명")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "뒤로가기" }));
+
     const project = screen.getByRole("button", { name: /여행 계획/ });
     const values = new Map<string, string>();
     const dataTransfer = {
@@ -182,6 +187,24 @@ describe("LifeFlowApp", () => {
     fireEvent.drop(doing, { dataTransfer });
 
     expect(within(doing).getByRole("button", { name: /여행 계획/ })).toBeInTheDocument();
+  });
+
+  it("터치 드래그로 할 일을 다른 칸반 영역에 놓는다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: "칸반" }));
+
+    const task = screen.getByRole("button", { name: /배포 문서 리뷰/ });
+    const doneColumn = screen.getByRole("group", { name: "완료 영역" });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => doneColumn) });
+
+    fireEvent.pointerDown(task, { pointerType: "touch", pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(task, { pointerType: "touch", pointerId: 1, clientX: 30, clientY: 10 });
+    fireEvent.pointerUp(task, { pointerType: "touch", pointerId: 1, clientX: 30, clientY: 10 });
+
+    expect(within(doneColumn).getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
   });
 
   it("현재 날짜가 바뀌면 가계부의 월별 요약과 기본 기간도 함께 바뀐다", () => {

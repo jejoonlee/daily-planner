@@ -199,7 +199,9 @@ input:focus, textarea:focus, select:focus, button:focus-visible { outline: 3px s
   color: var(--foreground);
   text-align: left;
   user-select: none;
+  -webkit-touch-callout: none;
 }
+.draggable-card { touch-action: none; }
 .task-button em { color: var(--muted); font-size: 12px; font-style: normal; }
 .task-button.moving { border-color: var(--accent); background: var(--surface-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 .project-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -236,7 +238,6 @@ input:focus, textarea:focus, select:focus, button:focus-visible { outline: 3px s
 .project-card { width: 100%; display: grid; gap: 5px; margin-top: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); text-align: left; }
 .project-card span { color: var(--muted); font-size: 12px; }
 .project-card.moving { border-color: var(--accent); background: var(--surface-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
-.detail-panel { margin-top: 14px; padding: 16px; border-left: 3px solid var(--accent); background: var(--surface-accent); }
 .detail-content { margin-top: 10px; }
 .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .detail-grid div { padding: 9px; background: var(--surface); }
@@ -318,9 +319,12 @@ th { color: var(--muted); font-weight: 600; }
   box-shadow: 0 24px 80px var(--shadow);
 }
 .modal-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+.modal-heading-copy { min-width: 0; flex: 1; }
 .modal-heading h2 { margin: 0; font-size: 22px; }
 .modal-heading p { margin: 5px 0 0; color: var(--muted); }
 .close-button { width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--foreground); font-size: 24px; line-height: 1; }
+.modal-back-button { display: none; min-height: 40px; align-items: center; gap: 5px; padding: 7px 10px; border: 0; background: transparent; color: var(--foreground); font-weight: 700; }
+.modal-back-button span { font-size: 27px; line-height: 0.7; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .field { margin-top: 12px; }
 .form-actions { margin-top: 16px; }
@@ -355,6 +359,8 @@ th { color: var(--muted); font-weight: 600; }
   .month-weekdays span { padding: 7px 2px; }
   .month-cell { min-height: 74px; padding: 4px; font-size: 11px; }
   .month-cell button { padding: 3px; font-size: 9px; }
+  .kanban { grid-template-columns: 1fr; overflow-x: visible; }
+  .kanban-column { min-height: 150px; }
   .dashboard-grid, .project-summary-grid { grid-template-columns: 1fr; }
   .money-summary-grid { grid-template-columns: 1fr; }
   .money-filters, .period-filter { align-items: stretch; flex-direction: column; }
@@ -363,8 +369,13 @@ th { color: var(--muted); font-weight: 600; }
   .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .transaction-card { grid-template-columns: 72px minmax(0, 1fr); }
   .transaction-card > strong { grid-column: 2; }
-  .modal-backdrop { padding: 10px; align-items: end; }
-  .modal { max-height: calc(100svh - 20px); padding: 16px; border-radius: 16px 16px 0 0; }
+  .modal-backdrop { display: block; padding: 0; overflow: hidden; }
+  .modal { width: 100%; height: 100svh; max-height: none; padding: max(12px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; box-shadow: none; }
+  .modal-heading { position: sticky; top: calc(-1 * max(12px, env(safe-area-inset-top))); z-index: 2; align-items: center; margin: 0 -16px 12px; padding: max(12px, env(safe-area-inset-top)) 12px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .modal-heading h2 { font-size: 19px; }
+  .modal-heading p { font-size: 12px; }
+  .modal-back-button { display: inline-flex; }
+  .close-button { display: none; }
   .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .parse-grid { grid-template-columns: 1fr; }
 }
