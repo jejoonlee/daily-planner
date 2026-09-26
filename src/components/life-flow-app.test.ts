@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifeFlowApp } from "./life-flow-app";
 
@@ -142,7 +142,7 @@ describe("LifeFlowApp", () => {
     expect(screen.getByText("2건")).toBeInTheDocument();
   });
 
-  it("길게 누른 할 일을 다른 칸반 영역으로 옮긴다", () => {
+  it("터치로 움직인 할 일을 다른 칸반 영역으로 옮긴다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
@@ -155,9 +155,9 @@ describe("LifeFlowApp", () => {
     fireEvent.dragEnd(task, { dataTransfer });
     expect(screen.queryByText("이동할 날짜 또는 칸반 영역을 선택하세요.")).not.toBeInTheDocument();
 
-    fireEvent.pointerDown(task, { clientX: 10, clientY: 10 });
-    act(() => vi.advanceTimersByTime(600));
-    fireEvent.pointerUp(task, { clientX: 10, clientY: 10 });
+    fireEvent.pointerDown(task, { pointerType: "touch", pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
+    fireEvent.pointerUp(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
 
     expect(screen.getByText("이동할 날짜 또는 칸반 영역을 선택하세요.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("group", { name: "완료 영역" }));

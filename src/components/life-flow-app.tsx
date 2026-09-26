@@ -815,15 +815,9 @@ type PointerDrop = (clientX: number, clientY: number, id: string) => void;
 
 function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; onPointerDrop?: PointerDrop; moving?: boolean }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const longPressTimer = useRef<number | null>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
   const pointerDragging = useRef(false);
   const suppressClick = useRef(false);
-
-  function cancelLongPress() {
-    if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
-    longPressTimer.current = null;
-  }
 
   function startPointerMove(pointerId: number) {
     if (!onStartMove || pointerDragging.current) return;
@@ -848,7 +842,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
     draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts={onStartMove ? "Alt+M" : undefined}
-    title={onStartMove ? "드래그하거나 길게 누르기, 또는 Alt+M으로 이동" : undefined}
+    title={onStartMove ? "드래그하거나 Alt+M으로 이동" : undefined}
     onKeyDown={(event) => {
       if (onStartMove && event.altKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
@@ -861,20 +855,19 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
     onPointerDown={(event) => {
       if (event.button !== 0) return;
       pointerStart.current = { x: event.clientX, y: event.clientY };
-      if (onStartMove && event.pointerType !== "mouse") longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
     }}
     onPointerMove={(event) => {
       if (!onStartMove) return;
       if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 10) startPointerMove(event.pointerId);
     }}
     onPointerUp={(event) => {
-      cancelLongPress();
       if (!pointerDragging.current) return;
       pointerDragging.current = false;
       buttonRef.current?.releasePointerCapture?.(event.pointerId);
       onPointerDrop?.(event.clientX, event.clientY, task.id);
+      window.setTimeout(() => { suppressClick.current = false; }, 0);
     }}
-    onPointerCancel={() => { cancelLongPress(); pointerDragging.current = false; onEndMove?.(); }}
+    onPointerCancel={() => { pointerDragging.current = false; suppressClick.current = false; onEndMove?.(); }}
     onContextMenu={(event) => { if (onStartMove) event.preventDefault(); }}
   ><span>{task.title}</span><em>{task.priority}</em></button>;
 }
@@ -1009,15 +1002,9 @@ function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEnd
 
 function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPointerDrop }: { project: Project; moving: boolean; onSelect: (id: string) => void; onStartMove: (id: string) => void; onEndMove: () => void; onPointerDrop: PointerDrop }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const longPressTimer = useRef<number | null>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
   const pointerDragging = useRef(false);
   const suppressClick = useRef(false);
-
-  function cancelLongPress() {
-    if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
-    longPressTimer.current = null;
-  }
 
   function startPointerMove(pointerId: number) {
     if (pointerDragging.current) return;
@@ -1034,7 +1021,7 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
     draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts="Alt+M"
-    title="드래그하거나 길게 누른 뒤 이동"
+    title="드래그하거나 Alt+M으로 이동"
     onClick={(event) => {
       event.stopPropagation();
       if (suppressClick.current) {
@@ -1049,19 +1036,18 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
     onPointerDown={(event) => {
       if (event.button !== 0) return;
       pointerStart.current = { x: event.clientX, y: event.clientY };
-      if (event.pointerType !== "mouse") longPressTimer.current = window.setTimeout(() => startPointerMove(event.pointerId), 450);
     }}
     onPointerMove={(event) => {
       if (Math.hypot(event.clientX - pointerStart.current.x, event.clientY - pointerStart.current.y) > 10) startPointerMove(event.pointerId);
     }}
     onPointerUp={(event) => {
-      cancelLongPress();
       if (!pointerDragging.current) return;
       pointerDragging.current = false;
       buttonRef.current?.releasePointerCapture?.(event.pointerId);
       onPointerDrop(event.clientX, event.clientY, project.id);
+      window.setTimeout(() => { suppressClick.current = false; }, 0);
     }}
-    onPointerCancel={() => { cancelLongPress(); pointerDragging.current = false; onEndMove(); }}
+    onPointerCancel={() => { pointerDragging.current = false; suppressClick.current = false; onEndMove(); }}
     onContextMenu={(event) => event.preventDefault()}
   ><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>;
 }
