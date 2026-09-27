@@ -681,14 +681,6 @@ export function LifeFlowApp() {
                 title="할 일"
                 actions={<><button className="secondary-button" onClick={() => setModal("project")}>+ 프로젝트</button><button className="primary-button" onClick={() => setModal("task")}>+ 할 일</button></>}
               />
-              <div className="task-projects">
-                <div className="section-heading">
-                  <h2>프로젝트</h2>
-                  <span>{projects.length}개</span>
-                </div>
-                {movingProjectId && <div className="move-hint" role="status"><span>옮길 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
-                <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} onPointerDrop={dropProjectAtPoint} />
-              </div>
               <div className="section-heading task-list-heading">
                 <h2>할 일 보기</h2>
               </div>
@@ -727,6 +719,14 @@ export function LifeFlowApp() {
               {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
               {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
               {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} onPointerDrop={dropTaskAtPoint} />}
+              <div className="task-projects">
+                <div className="section-heading">
+                  <h2>프로젝트</h2>
+                  <span>{projects.length}개</span>
+                </div>
+                {movingProjectId && <div className="move-hint" role="status"><span>옮길 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
+                <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} onPointerDrop={dropProjectAtPoint} />
+              </div>
             </section>
           )}
 
