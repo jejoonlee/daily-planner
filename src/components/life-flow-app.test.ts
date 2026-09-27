@@ -101,7 +101,7 @@ describe("LifeFlowApp", () => {
     const projectHeading = screen.getByRole("heading", { name: "프로젝트" });
     const taskHeading = screen.getByRole("heading", { name: "할 일 보기" });
     expect(projectHeading).toBeInTheDocument();
-    expect(taskHeading.compareDocumentPosition(projectHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(projectHeading.compareDocumentPosition(taskHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "월" }));
 
@@ -175,6 +175,29 @@ describe("LifeFlowApp", () => {
     fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 25, clientY: 10 });
     expect(task).not.toHaveClass("pointer-dragging");
     expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(0);
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
+  });
+
+  it("월 보기에서 할 일 카드를 다른 날짜로 옮긴다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: "월" }));
+
+    const task = screen.getByRole("button", { name: /병원 예약하기/ });
+    const sourceDate = screen.getByRole("gridcell", { name: "2026년 8월 28일" });
+    const targetDate = screen.getByRole("gridcell", { name: "2026년 8월 29일" });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => targetDate) });
+
+    fireEvent.pointerDown(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(task, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 30, clientY: 10 });
+    expect(sourceDate).not.toHaveClass("active-drop-target");
+    expect(targetDate).toHaveClass("active-drop-target");
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(1);
+    fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 30, clientY: 10 });
+
+    expect(within(targetDate).getByRole("button", { name: /병원 예약하기/ })).toBeInTheDocument();
     expect(document.querySelectorAll(".active-drop-target")).toHaveLength(0);
     Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
   });
