@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } f
 import { PasswordRecovery } from "./password-recovery";
 import { initialProjects, initialTasks, initialTransactions, initialWorkouts } from "@/lib/sample-data";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase-client";
-import type { ModalName, PageName, Priority, Project, Task, TaskStatus, Transaction, Workout } from "@/lib/types";
+import type { ModalName, PageName, Priority, Project, Task, TaskArea, TaskStatus, Transaction, Workout } from "@/lib/types";
 import { firstValidationError, formDataValues, loginSchema, projectSchema, taskSchema, transactionSchema, workoutSchema } from "@/lib/validation";
 
 const navigation: Array<{ page: PageName; icon: string; label: string }> = [
@@ -34,6 +34,12 @@ const statusLabel: Record<TaskStatus, string> = {
   todo: "할 일",
   doing: "진행 중",
   done: "완료"
+};
+
+const taskAreaLabel: Record<TaskArea, string> = {
+  company: "회사",
+  personal: "개인",
+  church: "성당"
 };
 
 const projectStatusLabel: Record<ProjectStatus, string> = {
@@ -170,6 +176,7 @@ export function LifeFlowApp() {
     return initialTransactions.map((transaction, index) => ({ ...transaction, happenedAt: dates[index] ?? transaction.happenedAt }));
   });
   const [taskView, setTaskView] = useState<"week" | "month" | "kanban">("week");
+  const [selectedTaskArea, setSelectedTaskArea] = useState<"all" | TaskArea>("all");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
@@ -265,6 +272,7 @@ export function LifeFlowApp() {
   const detailWorkout = detailItem?.kind === "workout" ? workouts.find((workout) => workout.id === detailItem.id) : undefined;
   const detailTransaction = detailItem?.kind === "transaction" ? transactions.find((transaction) => transaction.id === detailItem.id) : undefined;
   const todayTasks = tasks.filter((task) => task.scheduledDate === todayDate && task.status !== "done");
+  const visibleTasks = selectedTaskArea === "all" ? tasks : tasks.filter((task) => task.area === selectedTaskArea);
 
   const projectById = useMemo(
     () => Object.fromEntries(projects.map((project) => [project.id, project])),
@@ -508,7 +516,8 @@ export function LifeFlowApp() {
       id: editingId ?? uid("task"),
       title: data.title,
       description: data.description,
-      projectId: data.projectId,
+      area: data.area,
+      projectId: data.area === "company" ? data.projectId : undefined,
       priority: data.priority,
       status: tasks.find((item) => item.id === editingId)?.status ?? "todo",
       scheduledDate: data.scheduledDate,
@@ -736,10 +745,13 @@ export function LifeFlowApp() {
               <div className="section-heading task-list-heading">
                 <h2>할 일 보기</h2>
               </div>
+              <div className="segmented task-area-filter" role="group" aria-label="할 일 구분">
+                {(["all", "company", "personal", "church"] as const).map((area) => <button key={area} type="button" className={selectedTaskArea === area ? "active" : ""} onClick={() => { endTaskMove(); setSelectedTaskArea(area); }}>{area === "all" ? "전체" : taskAreaLabel[area]}</button>)}
+              </div>
               {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={endTaskMove}>취소</button></div>}
               <div className="view-toolbar">
                 <div className="segmented">
-                  {(["week", "month", "kanban"] as const).map((view) => <button key={view} className={taskView === view ? "active" : ""} onClick={() => setTaskView(view)}>{view === "week" ? "주" : view === "month" ? "월" : "칸반"}</button>)}
+                  {(["week", "month", "kanban"] as const).map((view) => <button key={view} className={taskView === view ? "active" : ""} onClick={() => { endTaskMove(); setTaskView(view); }}>{view === "week" ? "주" : view === "month" ? "월" : "칸반"}</button>)}
                 </div>
                 {taskView === "month" ? (
                   <div className="month-controls">
@@ -768,9 +780,9 @@ export function LifeFlowApp() {
                   </div>
                 ) : <span>전체 할 일</span>}
               </div>
-              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
-              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
-              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToStatus={moveTaskToStatus} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={visibleTasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={visibleTasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "kanban" && <TaskKanban tasks={visibleTasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToStatus={moveTaskToStatus} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
             </section>
           )}
 
@@ -892,6 +904,15 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onP
   const suppressClick = useRef(false);
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null);
 
+  useEffect(() => {
+    if (moving) return;
+    activePointerId.current = null;
+    pointerDragging.current = false;
+    suppressClick.current = false;
+  }, [moving]);
+
+  const visiblePointerOffset = moving ? pointerOffset : null;
+
   function startPointerMove(pointerId: number) {
     if (!onStartMove || pointerDragging.current) return;
     pointerDragging.current = true;
@@ -903,8 +924,8 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onP
   return <button
     ref={buttonRef}
     type="button"
-    className={`${moving ? "task-button draggable-card moving" : "task-button draggable-card"}${pointerOffset ? " pointer-dragging" : ""}`}
-    style={pointerOffset ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
+    className={`${moving ? "task-button draggable-card moving" : "task-button draggable-card"}${visiblePointerOffset ? " pointer-dragging" : ""}`}
+    style={visiblePointerOffset ? { transform: `translate3d(${visiblePointerOffset.x}px, ${visiblePointerOffset.y}px, 0)` } : undefined}
     onClick={(event) => {
       event.stopPropagation();
       if (suppressClick.current) {
@@ -951,7 +972,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onP
     }}
     onPointerCancel={() => { activePointerId.current = null; pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove?.(); }}
     onContextMenu={(event) => { if (onStartMove) event.preventDefault(); }}
-  ><span>{task.title}</span><em>{task.priority}</em></button>;
+  ><span>{task.title}</span><em>{taskAreaLabel[task.area]} · {task.priority}</em></button>;
 }
 
 function activateMoveTarget(event: React.KeyboardEvent<HTMLElement>, move: () => void) {
@@ -1033,7 +1054,7 @@ function TaskKanban({ tasks, onSelect, movingTaskId, activeDropTarget, onStartMo
 }
 
 function TaskDetail({ task, project }: { task: Task; project?: Project }) {
-  return <div className="detail-content"><div className="detail-grid"><div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div><div><span>상태</span><strong>{statusLabel[task.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>예정일</span><strong>{displayDate(task.scheduledDate)}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></div>;
+  return <div className="detail-content"><div className="detail-grid"><div><span>구분</span><strong>{taskAreaLabel[task.area]}</strong></div>{task.area === "company" && <div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div>}<div><span>상태</span><strong>{statusLabel[task.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>예정일</span><strong>{displayDate(task.scheduledDate)}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></div>;
 }
 
 function WorkoutDetail({ workout }: { workout: Workout }) {
@@ -1074,6 +1095,15 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
   const suppressClick = useRef(false);
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null);
 
+  useEffect(() => {
+    if (moving) return;
+    activePointerId.current = null;
+    pointerDragging.current = false;
+    suppressClick.current = false;
+  }, [moving]);
+
+  const visiblePointerOffset = moving ? pointerOffset : null;
+
   function startPointerMove(pointerId: number) {
     if (pointerDragging.current) return;
     pointerDragging.current = true;
@@ -1085,8 +1115,8 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
   return <button
     ref={buttonRef}
     type="button"
-    className={`${moving ? "project-card draggable-card moving" : "project-card draggable-card"}${pointerOffset ? " pointer-dragging" : ""}`}
-    style={pointerOffset ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
+    className={`${moving ? "project-card draggable-card moving" : "project-card draggable-card"}${visiblePointerOffset ? " pointer-dragging" : ""}`}
+    style={visiblePointerOffset ? { transform: `translate3d(${visiblePointerOffset.x}px, ${visiblePointerOffset.y}px, 0)` } : undefined}
     draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts="Alt+M"
@@ -1192,7 +1222,8 @@ function IntakeForm({ parsed, onParse, onSave }: { parsed: boolean; onParse: () 
 }
 
 function TaskForm({ initial, projects, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="할 일 제목" defaultValue={initial?.title !== undefined ? String(initial.title) : "QA 완료 조건 확인"} required /><label className="field"><span>프로젝트</span><select name="projectId" defaultValue={initial?.projectId}><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><SelectPriority defaultValue={initial?.priority} /><Field name="scheduledDate" label={initial ? "예정일" : "예정일 / 마감일"} type="date" defaultValue={initial?.scheduledDate ?? defaultDate} required />{initial && <Field name="dueDate" label="마감일" type="date" defaultValue={initial.dueDate} required />}<Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue={initial?.estimatedMinutes !== undefined ? String(initial.estimatedMinutes) : "90"} required /></div><label className="field"><span>상세 내용</span><textarea name="description" defaultValue={initial?.description ?? "로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다."} required /></label><ModalActions submitLabel={initial ? "수정 저장" : "할 일 저장"} /></form>;
+  const [area, setArea] = useState<TaskArea>(initial?.area ?? "company");
+  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="할 일 제목" defaultValue={initial?.title !== undefined ? String(initial.title) : "QA 완료 조건 확인"} required /><label className="field"><span>구분</span><select name="area" value={area} onChange={(event) => setArea(event.target.value as TaskArea)}><option value="company">회사</option><option value="personal">개인</option><option value="church">성당</option></select></label>{area === "company" && <label className="field"><span>프로젝트</span><select name="projectId" defaultValue={initial?.projectId}><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}<SelectPriority defaultValue={initial?.priority} /><Field name="scheduledDate" label={initial ? "예정일" : "예정일 / 마감일"} type="date" defaultValue={initial?.scheduledDate ?? defaultDate} required />{initial && <Field name="dueDate" label="마감일" type="date" defaultValue={initial.dueDate} required />}<Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue={initial?.estimatedMinutes !== undefined ? String(initial.estimatedMinutes) : "90"} required /></div><label className="field"><span>상세 내용</span><textarea name="description" defaultValue={initial?.description ?? "로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다."} required /></label><ModalActions submitLabel={initial ? "수정 저장" : "할 일 저장"} /></form>;
 }
 
 function ProjectForm({ initial, defaultDate, onSubmit }: { initial?: Project; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {

@@ -140,6 +140,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible { outline: 3px s
 .section-heading > span { color: var(--muted); font-size: 13px; }
 .task-projects { margin-top: 42px; margin-bottom: 56px; }
 .task-list-heading { margin-bottom: 14px; padding-top: 36px; border-top: 1px solid var(--border); }
+.task-area-filter { width: fit-content; margin-bottom: 12px; }
 .move-hint { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 10px; background: var(--surface-accent); font-size: 13px; }
 .move-hint button { padding: 4px 7px; border: 0; background: transparent; color: var(--foreground); font-weight: 600; }
 

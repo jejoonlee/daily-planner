@@ -2,6 +2,7 @@ export type PageName = "dashboard" | "tasks" | "workouts" | "money" | "settings"
 export type ModalName = "intake" | "task" | "project" | "workout" | "money" | null;
 export type Priority = "P1" | "P2" | "P3" | "P4";
 export type TaskStatus = "todo" | "doing" | "done";
+export type TaskArea = "company" | "personal" | "church";
 
 export interface Project {
   id: string;
@@ -17,6 +18,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  area: TaskArea;
   projectId?: string;
   priority: Priority;
   status: TaskStatus;

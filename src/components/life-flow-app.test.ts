@@ -147,7 +147,7 @@ describe("LifeFlowApp", () => {
     expect(screen.getByText("2건")).toBeInTheDocument();
   });
 
-  it("마우스 드래그 중에 카드가 포인터를 따라가고 바깥에 놓으면 취소된다", () => {
+  it("마우스 드래그를 취소하면 카드 위치와 강조를 초기화한다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
@@ -171,12 +171,42 @@ describe("LifeFlowApp", () => {
     expect(doing).toHaveClass("active-drop-target");
     expect(document.querySelectorAll(".active-drop-target")).toHaveLength(1);
     expect(screen.getByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).toBeInTheDocument();
-    elementFromPoint.mockReturnValue(null);
-    fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 25, clientY: 10 });
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
     expect(task).not.toHaveClass("pointer-dragging");
+    expect(task.style.transform).toBe("");
     expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".active-drop-target")).toHaveLength(0);
     Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
+  });
+
+  it("할 일을 회사 개인 성당으로 구분하고 개인과 성당에서는 프로젝트를 숨긴다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+
+    const areaFilter = screen.getByRole("group", { name: "할 일 구분" });
+    fireEvent.click(within(areaFilter).getByRole("button", { name: "개인" }));
+    expect(screen.getByRole("button", { name: /병원 예약하기/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /배포 문서 리뷰/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "+ 할 일" }));
+    const areaSelect = screen.getByLabelText("구분");
+    expect(areaSelect).toHaveValue("company");
+    expect(screen.getByLabelText("프로젝트")).toBeInTheDocument();
+    fireEvent.change(areaSelect, { target: { value: "personal" } });
+    expect(screen.queryByLabelText("프로젝트")).not.toBeInTheDocument();
+    fireEvent.change(areaSelect, { target: { value: "church" } });
+    expect(screen.queryByLabelText("프로젝트")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "성당 봉사 일정 확인" } });
+    fireEvent.click(screen.getByRole("button", { name: "할 일 저장" }));
+
+    fireEvent.click(within(areaFilter).getByRole("button", { name: "성당" }));
+    const churchTask = screen.getByRole("button", { name: /성당 봉사 일정 확인/ });
+    expect(churchTask).toHaveTextContent("성당 · P1");
+    fireEvent.click(churchTask);
+    const detail = screen.getByRole("dialog", { name: "성당 봉사 일정 확인" });
+    expect(within(detail).getByText("성당")).toBeInTheDocument();
+    expect(within(detail).queryByText("프로젝트")).not.toBeInTheDocument();
   });
 
   it("월 보기에서 할 일 카드를 다른 날짜로 옮긴다", () => {
