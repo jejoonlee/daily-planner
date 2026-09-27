@@ -154,14 +154,29 @@ describe("LifeFlowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "칸반" }));
 
     const task = screen.getByRole("button", { name: /배포 문서 리뷰/ });
+    const todo = screen.getByRole("group", { name: "할 일 영역" });
+    const doing = screen.getByRole("group", { name: "진행 중 영역" });
+    const elementFromPoint = vi.fn<() => HTMLElement | null>(() => todo);
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: elementFromPoint });
     fireEvent.pointerDown(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(task, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 25, clientY: 10 });
     expect(task).toHaveClass("pointer-dragging");
-    expect(screen.getByRole("group", { name: "완료 영역" })).toHaveClass("drop-target");
+    expect(todo).toHaveClass("active-drop-target");
+    expect(doing).not.toHaveClass("active-drop-target");
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(1);
+
+    elementFromPoint.mockReturnValue(doing);
+    fireEvent.pointerMove(task, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 45, clientY: 10 });
+    expect(todo).not.toHaveClass("active-drop-target");
+    expect(doing).toHaveClass("active-drop-target");
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(1);
     expect(screen.getByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).toBeInTheDocument();
+    elementFromPoint.mockReturnValue(null);
     fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 25, clientY: 10 });
     expect(task).not.toHaveClass("pointer-dragging");
     expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(0);
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
   });
 
   it("프로젝트 카드를 다른 진행 상태로 드래그한다", () => {
@@ -179,11 +194,14 @@ describe("LifeFlowApp", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정 저장" }));
 
     const project = screen.getByRole("button", { name: /수정한 여행 계획/ });
+    const ready = screen.getByRole("group", { name: "프로젝트 준비 영역" });
     const doing = screen.getByRole("group", { name: "프로젝트 진행 중 영역" });
     Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => doing) });
     fireEvent.pointerDown(project, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(project, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 30, clientY: 10 });
-    expect(doing).toHaveClass("drop-target");
+    expect(ready).not.toHaveClass("active-drop-target");
+    expect(doing).toHaveClass("active-drop-target");
+    expect(document.querySelectorAll(".active-drop-target")).toHaveLength(1);
     fireEvent.pointerUp(project, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 30, clientY: 10 });
 
     expect(within(doing).getByRole("button", { name: /수정한 여행 계획/ })).toBeInTheDocument();

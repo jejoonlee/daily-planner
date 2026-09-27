@@ -174,6 +174,8 @@ export function LifeFlowApp() {
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [movingProjectId, setMovingProjectId] = useState<string | null>(null);
+  const [activeTaskDropTarget, setActiveTaskDropTarget] = useState<string | null>(null);
+  const [activeProjectDropTarget, setActiveProjectDropTarget] = useState<ProjectStatus | null>(null);
   const [dateFrom, setDateFrom] = useState(`${currentMonth}-01`);
   const [dateTo, setDateTo] = useState(() => monthEnd(currentMonth));
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -300,11 +302,53 @@ export function LifeFlowApp() {
     closeDetail();
   }
 
+  function endTaskMove() {
+    setMovingTaskId(null);
+    setActiveTaskDropTarget(null);
+  }
+
+  function endProjectMove() {
+    setMovingProjectId(null);
+    setActiveProjectDropTarget(null);
+  }
+
+  function startTaskMove(taskId: string) {
+    const task = tasks.find((item) => item.id === taskId);
+    setMovingTaskId(taskId);
+    setActiveTaskDropTarget(task ? (taskView === "kanban" ? `status:${task.status}` : `date:${task.scheduledDate}`) : null);
+  }
+
+  function startProjectMove(projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    setMovingProjectId(projectId);
+    setActiveProjectDropTarget(project?.status ?? null);
+  }
+
+  function taskDropTargetAtPoint(clientX: number, clientY: number) {
+    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-task-date], [data-task-status]");
+    if (target?.dataset.taskDate) return { element: target, key: `date:${target.dataset.taskDate}` };
+    if (target?.dataset.taskStatus) return { element: target, key: `status:${target.dataset.taskStatus}` };
+    return null;
+  }
+
+  function projectDropTargetAtPoint(clientX: number, clientY: number) {
+    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-project-status]");
+    return target?.dataset.projectStatus ? { element: target, status: target.dataset.projectStatus as ProjectStatus } : null;
+  }
+
+  function hoverTaskDropTarget(clientX: number, clientY: number) {
+    setActiveTaskDropTarget(taskDropTargetAtPoint(clientX, clientY)?.key ?? null);
+  }
+
+  function hoverProjectDropTarget(clientX: number, clientY: number) {
+    setActiveProjectDropTarget(projectDropTargetAtPoint(clientX, clientY)?.status ?? null);
+  }
+
   function moveTaskToDate(date: string, draggedTaskId?: string) {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, scheduledDate: date } : task));
-    setMovingTaskId(null);
+    endTaskMove();
     setToast(`${displayDate(date)}로 할 일을 옮겼습니다.`);
   }
 
@@ -312,7 +356,7 @@ export function LifeFlowApp() {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status } : task));
-    setMovingTaskId(null);
+    endTaskMove();
     setToast(`‘${statusLabel[status]}’ 영역으로 옮겼습니다.`);
   }
 
@@ -320,15 +364,15 @@ export function LifeFlowApp() {
     const projectId = draggedProjectId || movingProjectId;
     if (!projectId) return;
     setProjects((current) => current.map((project) => project.id === projectId ? { ...project, status } : project));
-    setMovingProjectId(null);
+    endProjectMove();
     setToast(`프로젝트를 ‘${projectStatusLabel[status]}’ 영역으로 옮겼습니다.`);
   }
 
   function dropTaskAtPoint(clientX: number, clientY: number, taskId: string) {
-    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-task-date], [data-task-status]");
+    const target = taskDropTargetAtPoint(clientX, clientY)?.element;
     const task = tasks.find((item) => item.id === taskId);
     if (target?.dataset.taskDate === task?.scheduledDate || target?.dataset.taskStatus === task?.status) {
-      setMovingTaskId(null);
+      endTaskMove();
       return true;
     }
     if (target?.dataset.taskDate) {
@@ -343,10 +387,10 @@ export function LifeFlowApp() {
   }
 
   function dropProjectAtPoint(clientX: number, clientY: number, projectId: string) {
-    const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-project-status]");
+    const target = projectDropTargetAtPoint(clientX, clientY)?.element;
     const project = projects.find((item) => item.id === projectId);
     if (target?.dataset.projectStatus === project?.status) {
-      setMovingProjectId(null);
+      endProjectMove();
       return true;
     }
     if (target?.dataset.projectStatus) {
@@ -684,7 +728,7 @@ export function LifeFlowApp() {
               <div className="section-heading task-list-heading">
                 <h2>할 일 보기</h2>
               </div>
-              {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingTaskId(null)}>취소</button></div>}
+              {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={endTaskMove}>취소</button></div>}
               <div className="view-toolbar">
                 <div className="segmented">
                   {(["week", "month", "kanban"] as const).map((view) => <button key={view} className={taskView === view ? "active" : ""} onClick={() => setTaskView(view)}>{view === "week" ? "주" : view === "month" ? "월" : "칸반"}</button>)}
@@ -716,16 +760,16 @@ export function LifeFlowApp() {
                   </div>
                 ) : <span>전체 할 일</span>}
               </div>
-              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
-              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToDate={moveTaskToDate} onPointerDrop={dropTaskAtPoint} />}
-              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} onSelect={openTaskDetail} onStartMove={setMovingTaskId} onEndMove={() => setMovingTaskId(null)} onMoveToStatus={moveTaskToStatus} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "week" && <WeekView weekStart={selectedWeekStart} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "month" && <MonthView month={selectedMonth} todayDate={todayDate} tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToDate={moveTaskToDate} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
+              {taskView === "kanban" && <TaskKanban tasks={tasks} movingTaskId={movingTaskId} activeDropTarget={activeTaskDropTarget} onSelect={openTaskDetail} onStartMove={startTaskMove} onEndMove={endTaskMove} onMoveToStatus={moveTaskToStatus} onPointerHover={hoverTaskDropTarget} onPointerDrop={dropTaskAtPoint} />}
               <div className="task-projects">
                 <div className="section-heading">
                   <h2>프로젝트</h2>
                   <span>{projects.length}개</span>
                 </div>
-                {movingProjectId && <div className="move-hint" role="status"><span>옮길 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
-                <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} onPointerDrop={dropProjectAtPoint} />
+                {movingProjectId && <div className="move-hint" role="status"><span>옮길 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={endProjectMove}>취소</button></div>}
+                <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} activeDropTarget={activeProjectDropTarget} onStartMove={startProjectMove} onEndMove={endProjectMove} onMoveToStatus={moveProjectToStatus} onPointerHover={hoverProjectDropTarget} onPointerDrop={dropProjectAtPoint} />
               </div>
             </section>
           )}
@@ -838,8 +882,9 @@ function MoneySummary({ title, value, detail, comparison = false }: { title: str
 }
 
 type PointerDrop = (clientX: number, clientY: number, id: string) => boolean;
+type PointerHover = (clientX: number, clientY: number) => void;
 
-function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; onPointerDrop?: PointerDrop; moving?: boolean }) {
+function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onPointerDrop, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; onPointerHover?: PointerHover; onPointerDrop?: PointerDrop; moving?: boolean }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
   const activePointerId = useRef<number | null>(null);
@@ -888,7 +933,10 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
       if (!onStartMove || activePointerId.current !== event.pointerId) return;
       const offset = { x: event.clientX - pointerStart.current.x, y: event.clientY - pointerStart.current.y };
       if (Math.hypot(offset.x, offset.y) > 10) startPointerMove(event.pointerId);
-      if (pointerDragging.current) setPointerOffset(offset);
+      if (pointerDragging.current) {
+        setPointerOffset(offset);
+        onPointerHover?.(event.clientX, event.clientY);
+      }
     }}
     onPointerUp={(event) => {
       if (activePointerId.current !== event.pointerId) return;
@@ -914,27 +962,29 @@ function activateMoveTarget(event: React.KeyboardEvent<HTMLElement>, move: () =>
 
 type CalendarMoveProps = {
   movingTaskId: string | null;
+  activeDropTarget: string | null;
   onStartMove: (id: string) => void;
   onEndMove: () => void;
   onMoveToDate: (date: string, taskId?: string) => void;
+  onPointerHover: PointerHover;
   onPointerDrop: PointerDrop;
 };
 
-function WeekView({ weekStart, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate, onPointerDrop }: { weekStart: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
+function WeekView({ weekStart, todayDate, tasks, onSelect, movingTaskId, activeDropTarget, onStartMove, onEndMove, onMoveToDate, onPointerHover, onPointerDrop }: { weekStart: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
   const dates = Array.from({ length: 7 }, (_, index) => shiftDate(weekStart, index));
   return <div className="week-grid">{dates.map((date, index) => {
     const day = Number(date.slice(-2));
     return <div
-      className={`${date === todayDate ? "day-column today" : "day-column"}${movingTaskId ? " drop-target" : ""}`}
+      className={`${date === todayDate ? "day-column today" : "day-column"}${movingTaskId ? " drop-target" : ""}${activeDropTarget === `date:${date}` ? " active-drop-target" : ""}`}
       key={date}
       data-task-date={date}
       tabIndex={movingTaskId ? 0 : undefined}
       onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
-    ><strong>{["월", "화", "수", "목", "금", "토", "일"][index]} {day}</strong>{tasks.filter((task) => task.scheduledDate === date).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
+    ><strong>{["월", "화", "수", "목", "금", "토", "일"][index]} {day}</strong>{tasks.filter((task) => task.scheduledDate === date).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerHover={onPointerHover} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
   })}</div>;
 }
 
-function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToDate, onPointerDrop }: { month: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
+function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, activeDropTarget, onStartMove, onEndMove, onMoveToDate, onPointerHover, onPointerDrop }: { month: string; todayDate: string; tasks: Task[]; onSelect: (id: string) => void } & CalendarMoveProps) {
   const [year, monthNumber] = month.split("-").map(Number);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const leadingEmptyDays = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
@@ -955,14 +1005,14 @@ function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMov
             const date = `${month}-${String(day).padStart(2, "0")}`;
             const dayTasks = tasks.filter((task) => task.scheduledDate === date);
             return <div
-              className={`${date === todayDate ? "month-cell today" : "month-cell"}${movingTaskId ? " drop-target" : ""}`}
+              className={`${date === todayDate ? "month-cell today" : "month-cell"}${movingTaskId ? " drop-target" : ""}${activeDropTarget === `date:${date}` ? " active-drop-target" : ""}`}
               role="gridcell"
               aria-label={`${monthLabel(month)} ${day}일`}
               key={date}
               data-task-date={date}
               tabIndex={movingTaskId ? 0 : undefined}
               onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
-            ><time dateTime={date}>{day}</time>{dayTasks.map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
+            ><time dateTime={date}>{day}</time>{dayTasks.map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerHover={onPointerHover} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
           })}
         </div>)}
       </div>
@@ -970,16 +1020,16 @@ function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMov
   );
 }
 
-function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onMoveToStatus, onPointerDrop }: { tasks: Task[]; onSelect: (id: string) => void; movingTaskId: string | null; onStartMove: (id: string) => void; onEndMove: () => void; onMoveToStatus: (status: TaskStatus, taskId?: string) => void; onPointerDrop: PointerDrop }) {
+function TaskKanban({ tasks, onSelect, movingTaskId, activeDropTarget, onStartMove, onEndMove, onMoveToStatus, onPointerHover, onPointerDrop }: { tasks: Task[]; onSelect: (id: string) => void; movingTaskId: string | null; activeDropTarget: string | null; onStartMove: (id: string) => void; onEndMove: () => void; onMoveToStatus: (status: TaskStatus, taskId?: string) => void; onPointerHover: PointerHover; onPointerDrop: PointerDrop }) {
   return <div className="kanban">{(["todo", "doing", "done"] as TaskStatus[]).map((status) => <div
-    className={`kanban-column${movingTaskId ? " drop-target" : ""}`}
+    className={`kanban-column${movingTaskId ? " drop-target" : ""}${activeDropTarget === `status:${status}` ? " active-drop-target" : ""}`}
     key={status}
     data-task-status={status}
     role="group"
     aria-label={`${statusLabel[status]} 영역`}
     tabIndex={movingTaskId ? 0 : undefined}
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
-  ><strong>{statusLabel[status]} · {tasks.filter((task) => task.status === status).length}</strong>{tasks.filter((task) => task.status === status).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>)}</div>;
+  ><strong>{statusLabel[status]} · {tasks.filter((task) => task.status === status).length}</strong>{tasks.filter((task) => task.status === status).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerHover={onPointerHover} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>)}</div>;
 }
 
 function TaskDetail({ task, project }: { task: Task; project?: Project }) {
@@ -994,27 +1044,29 @@ function TransactionDetail({ transaction }: { transaction: Transaction }) {
   return <div className="detail-content"><div className="detail-grid"><div><span>거래 일시</span><strong>{transaction.happenedAt.replace("T", " ")}</strong></div><div><span>수입 / 지출</span><strong>{transaction.flow === "income" ? "수입" : "지출"}</strong></div><div><span>금액</span><strong className={transaction.flow}>{signedWon(transactionValue(transaction))}</strong></div><div><span>사용처</span><strong>{transaction.merchant}</strong></div><div><span>카테고리</span><strong>{transaction.category}</strong></div><div><span>금융 계좌</span><strong>{transaction.account}</strong></div></div></div>;
 }
 
-function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEndMove, onMoveToStatus, onPointerDrop }: {
+function ProjectKanban({ projects, onSelect, movingProjectId, activeDropTarget, onStartMove, onEndMove, onMoveToStatus, onPointerHover, onPointerDrop }: {
   projects: Project[];
   onSelect: (id: string) => void;
   movingProjectId: string | null;
+  activeDropTarget: ProjectStatus | null;
   onStartMove: (id: string) => void;
   onEndMove: () => void;
   onMoveToStatus: (status: ProjectStatus, projectId?: string) => void;
+  onPointerHover: PointerHover;
   onPointerDrop: PointerDrop;
 }) {
   return <div className="kanban project-kanban">{(["ready", "doing", "done"] as ProjectStatus[]).map((status) => <div
-    className={`kanban-column${movingProjectId ? " drop-target" : ""}`}
+    className={`kanban-column${movingProjectId ? " drop-target" : ""}${activeDropTarget === status ? " active-drop-target" : ""}`}
     key={status}
     data-project-status={status}
     role="group"
     aria-label={`프로젝트 ${projectStatusLabel[status]} 영역`}
     tabIndex={movingProjectId ? 0 : undefined}
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
-  ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <ProjectCard key={project.id} project={project} moving={movingProjectId === project.id} onSelect={onSelect} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} />)}</div>)}</div>;
+  ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <ProjectCard key={project.id} project={project} moving={movingProjectId === project.id} onSelect={onSelect} onStartMove={onStartMove} onEndMove={onEndMove} onPointerHover={onPointerHover} onPointerDrop={onPointerDrop} />)}</div>)}</div>;
 }
 
-function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPointerDrop }: { project: Project; moving: boolean; onSelect: (id: string) => void; onStartMove: (id: string) => void; onEndMove: () => void; onPointerDrop: PointerDrop }) {
+function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPointerHover, onPointerDrop }: { project: Project; moving: boolean; onSelect: (id: string) => void; onStartMove: (id: string) => void; onEndMove: () => void; onPointerHover: PointerHover; onPointerDrop: PointerDrop }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
   const activePointerId = useRef<number | null>(null);
@@ -1057,7 +1109,10 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
       if (activePointerId.current !== event.pointerId) return;
       const offset = { x: event.clientX - pointerStart.current.x, y: event.clientY - pointerStart.current.y };
       if (Math.hypot(offset.x, offset.y) > 10) startPointerMove(event.pointerId);
-      if (pointerDragging.current) setPointerOffset(offset);
+      if (pointerDragging.current) {
+        setPointerOffset(offset);
+        onPointerHover(event.clientX, event.clientY);
+      }
     }}
     onPointerUp={(event) => {
       if (activePointerId.current !== event.pointerId) return;
