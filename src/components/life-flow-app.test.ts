@@ -142,7 +142,7 @@ describe("LifeFlowApp", () => {
     expect(screen.getByText("2건")).toBeInTheDocument();
   });
 
-  it("터치로 움직인 할 일을 다른 칸반 영역으로 옮긴다", () => {
+  it("터치 드래그 중에 카드가 포인터를 따라가고 바깥에 놓으면 취소된다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
@@ -151,18 +151,16 @@ describe("LifeFlowApp", () => {
     const task = screen.getByRole("button", { name: /배포 문서 리뷰/ });
     const dataTransfer = { setData: () => undefined, getData: () => "task-doc", effectAllowed: "move" };
     fireEvent.dragStart(task, { dataTransfer });
-    expect(screen.getByText("이동할 날짜 또는 칸반 영역을 선택하세요.")).toBeInTheDocument();
+    expect(screen.getByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).toBeInTheDocument();
     fireEvent.dragEnd(task, { dataTransfer });
-    expect(screen.queryByText("이동할 날짜 또는 칸반 영역을 선택하세요.")).not.toBeInTheDocument();
+    expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
 
     fireEvent.pointerDown(task, { pointerType: "touch", pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
+    expect(task).toHaveClass("pointer-dragging");
     fireEvent.pointerUp(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
-
-    expect(screen.getByText("이동할 날짜 또는 칸반 영역을 선택하세요.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("group", { name: "완료 영역" }));
-
-    expect(within(screen.getByRole("group", { name: "완료 영역" })).getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
+    expect(task).not.toHaveClass("pointer-dragging");
+    expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
   });
 
   it("프로젝트 카드를 다른 진행 상태로 드래그한다", () => {
@@ -173,9 +171,13 @@ describe("LifeFlowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /여행 계획/ }));
     expect(screen.getByRole("dialog", { name: "여행 계획" })).toBeInTheDocument();
     expect(within(screen.getByRole("dialog")).getByText("프로젝트 설명")).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "뒤로가기" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
+    expect(screen.getByRole("dialog", { name: "프로젝트 수정" })).toBeInTheDocument();
+    expect(screen.getByLabelText("프로젝트 이름")).toHaveValue("여행 계획");
+    fireEvent.change(screen.getByLabelText("프로젝트 이름"), { target: { value: "수정한 여행 계획" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정 저장" }));
 
-    const project = screen.getByRole("button", { name: /여행 계획/ });
+    const project = screen.getByRole("button", { name: /수정한 여행 계획/ });
     const values = new Map<string, string>();
     const dataTransfer = {
       setData: (type: string, value: string) => values.set(type, value),
@@ -186,7 +188,7 @@ describe("LifeFlowApp", () => {
     const doing = screen.getByRole("group", { name: "프로젝트 진행 중 영역" });
     fireEvent.drop(doing, { dataTransfer });
 
-    expect(within(doing).getByRole("button", { name: /여행 계획/ })).toBeInTheDocument();
+    expect(within(doing).getByRole("button", { name: /수정한 여행 계획/ })).toBeInTheDocument();
   });
 
   it("터치 드래그로 할 일을 다른 칸반 영역에 놓는다", () => {
