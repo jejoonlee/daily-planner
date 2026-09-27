@@ -119,11 +119,14 @@ describe("LifeFlowApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "칸반" }));
     const task = screen.getByRole("button", { name: /배포 문서 리뷰/ });
-    const dataTransfer = { setData: () => undefined, getData: () => "task-doc", effectAllowed: "move" };
-    fireEvent.dragStart(task, { dataTransfer });
-    fireEvent.drop(screen.getByRole("group", { name: "완료 영역" }), { dataTransfer });
+    const doneColumn = screen.getByRole("group", { name: "완료 영역" });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => doneColumn) });
+    fireEvent.pointerDown(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(task, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 30, clientY: 10 });
+    fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 30, clientY: 10 });
 
-    expect(within(screen.getByRole("group", { name: "완료 영역" })).getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
+    expect(within(doneColumn).getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
 
     fireEvent.click(screen.getByRole("button", { name: "가계부" }));
 
@@ -142,23 +145,18 @@ describe("LifeFlowApp", () => {
     expect(screen.getByText("2건")).toBeInTheDocument();
   });
 
-  it("터치 드래그 중에 카드가 포인터를 따라가고 바깥에 놓으면 취소된다", () => {
+  it("마우스 드래그 중에 카드가 포인터를 따라가고 바깥에 놓으면 취소된다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
     fireEvent.click(screen.getByRole("button", { name: "칸반" }));
 
     const task = screen.getByRole("button", { name: /배포 문서 리뷰/ });
-    const dataTransfer = { setData: () => undefined, getData: () => "task-doc", effectAllowed: "move" };
-    fireEvent.dragStart(task, { dataTransfer });
-    expect(screen.getByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).toBeInTheDocument();
-    fireEvent.dragEnd(task, { dataTransfer });
-    expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
-
-    fireEvent.pointerDown(task, { pointerType: "touch", pointerId: 1, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
+    fireEvent.pointerDown(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(task, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 25, clientY: 10 });
     expect(task).toHaveClass("pointer-dragging");
-    fireEvent.pointerUp(task, { pointerType: "touch", pointerId: 1, clientX: 25, clientY: 10 });
+    expect(screen.getByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).toBeInTheDocument();
+    fireEvent.pointerUp(task, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 25, clientY: 10 });
     expect(task).not.toHaveClass("pointer-dragging");
     expect(screen.queryByText("옮길 날짜 또는 영역 위에서 카드를 놓으세요.")).not.toBeInTheDocument();
   });
@@ -178,17 +176,14 @@ describe("LifeFlowApp", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정 저장" }));
 
     const project = screen.getByRole("button", { name: /수정한 여행 계획/ });
-    const values = new Map<string, string>();
-    const dataTransfer = {
-      setData: (type: string, value: string) => values.set(type, value),
-      getData: (type: string) => values.get(type) ?? "",
-      effectAllowed: "move"
-    };
-    fireEvent.dragStart(project, { dataTransfer });
     const doing = screen.getByRole("group", { name: "프로젝트 진행 중 영역" });
-    fireEvent.drop(doing, { dataTransfer });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => doing) });
+    fireEvent.pointerDown(project, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(project, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 30, clientY: 10 });
+    fireEvent.pointerUp(project, { pointerType: "mouse", pointerId: 1, button: 0, clientX: 30, clientY: 10 });
 
     expect(within(doing).getByRole("button", { name: /수정한 여행 계획/ })).toBeInTheDocument();
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
   });
 
   it("터치 드래그로 할 일을 다른 칸반 영역에 놓는다", () => {

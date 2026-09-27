@@ -592,7 +592,6 @@ export function LifeFlowApp() {
           <div className="brand"><span className="brand-mark">L</span><span>Life Flow</span></div>
           <div>
             <h1>{authMode === "signup" ? "Life Flow 시작하기" : "다시 오신 것을 환영해요"}</h1>
-            <p>{authMode === "signup" ? "이메일과 비밀번호로 나만의 계정을 만드세요." : "오늘의 일정과 생활 기록을 한곳에서 관리하세요."}</p>
           </div>
           {!supabase && !demoAuthEnabled && <p className="form-error" role="alert">Supabase 환경변수를 설정해야 로그인할 수 있습니다.</p>}
           <label><span>이메일</span><input name="email" type="email" autoComplete="email" disabled={authBusy} required /></label>
@@ -645,7 +644,6 @@ export function LifeFlowApp() {
             <section>
               <PageHeading
                 title="좋은 아침이에요"
-                description="오늘 필요한 것만 확인하고 바로 기록하세요."
                 actions={<><button className="secondary-button" onClick={() => setModal("money")}>가계부 입력</button><button className="primary-button" onClick={() => setModal("intake")}>오늘 계획 입력</button></>}
               />
               <div className="dashboard-grid">
@@ -681,19 +679,18 @@ export function LifeFlowApp() {
             <section>
               <PageHeading
                 title="할 일"
-                description="할 일 카드를 누르면 기존 내용을 바로 수정할 수 있습니다."
                 actions={<><button className="secondary-button" onClick={() => setModal("project")}>+ 프로젝트</button><button className="primary-button" onClick={() => setModal("task")}>+ 할 일</button></>}
               />
               <div className="task-projects">
                 <div className="section-heading">
-                  <div><h2>프로젝트</h2><p>카드를 잡아 다른 영역에 놓으면 진행 상태가 바뀝니다. 누르면 상세 내용을 확인할 수 있습니다.</p></div>
+                  <h2>프로젝트</h2>
                   <span>{projects.length}개</span>
                 </div>
                 {movingProjectId && <div className="move-hint" role="status"><span>옮길 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingProjectId(null)}>취소</button></div>}
                 <ProjectKanban projects={projects} onSelect={(id) => setDetailItem({ kind: "project", id })} movingProjectId={movingProjectId} onStartMove={setMovingProjectId} onEndMove={() => setMovingProjectId(null)} onMoveToStatus={moveProjectToStatus} onPointerDrop={dropProjectAtPoint} />
               </div>
               <div className="section-heading task-list-heading">
-                <div><h2>할 일 보기</h2><p>선택한 기간이나 진행 상태에 따라 확인하고, 칸반에서는 카드를 잡아 다른 영역에 놓으세요.</p></div>
+                <h2>할 일 보기</h2>
               </div>
               {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={() => setMovingTaskId(null)}>취소</button></div>}
               <div className="view-toolbar">
@@ -735,7 +732,7 @@ export function LifeFlowApp() {
 
           {page === "workouts" && (
             <section>
-              <PageHeading title="운동 관리" description="운동 카드를 누르면 상세 내용을 확인할 수 있습니다." actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
+              <PageHeading title="운동 관리" actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
               <div className="record-card-grid">
                 {workouts.map((workout) => <button type="button" className="record-card" key={workout.id} onClick={() => setDetailItem({ kind: "workout", id: workout.id })}><span>{displayDate(workout.startedAt)}</span><strong>{workout.title}</strong><small>{workout.place} · {workout.durationMinutes}분</small><small>{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</small></button>)}
               </div>
@@ -744,7 +741,7 @@ export function LifeFlowApp() {
 
           {page === "money" && (
             <section>
-              <PageHeading title="가계부" description="거래 카드를 누르면 상세 내용을 확인할 수 있습니다." actions={<button className="primary-button" onClick={() => setModal("money")}>+ 거래 등록</button>} />
+              <PageHeading title="가계부" actions={<button className="primary-button" onClick={() => setModal("money")}>+ 거래 등록</button>} />
               <div className="money-summary-grid">
                 <MoneySummary title="전월 잔액" value={monthlyMoney.previous.net} detail={`수입 ${won(monthlyMoney.previous.income)} · 지출 ${won(monthlyMoney.previous.expense)}`} />
                 <MoneySummary title="이번 달 잔액" value={monthlyMoney.current.net} detail={`수입 ${won(monthlyMoney.current.income)} · 지출 ${won(monthlyMoney.current.expense)}`} />
@@ -773,7 +770,7 @@ export function LifeFlowApp() {
 
           {page === "settings" && (
             <section>
-              <PageHeading title="설정" description="아침 계획 알림과 앱 기본 화면을 관리합니다." />
+              <PageHeading title="설정" />
               <form className="panel settings-panel" onSubmit={(event) => { event.preventDefault(); setToast("설정을 저장했습니다."); }}>
                 <div className="panel-heading"><strong>알림 설정</strong><span>Asia/Seoul</span></div>
                 <label className="setting-row"><span><strong>아침 계획 알림</strong><small>일정·할 일·운동 입력을 요청합니다.</small></span><input type="checkbox" checked={notificationEnabled} onChange={(event) => setNotificationEnabled(event.target.checked)} /></label>
@@ -787,25 +784,25 @@ export function LifeFlowApp() {
         </div>
       </main>
 
-      {detailProject && <EntryModal title={detailProject.name} description="프로젝트 상세 내용" onClose={closeDetail}>
+      {detailProject && <EntryModal title={detailProject.name} onClose={closeDetail}>
         <ProjectDetail project={detailProject} />
         <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editProject(detailProject.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
       </EntryModal>}
-      {detailTask && <EntryModal title={detailTask.title} description="할 일 상세 내용" onClose={closeDetail}>
+      {detailTask && <EntryModal title={detailTask.title} onClose={closeDetail}>
         <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
         <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTask(detailTask.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
       </EntryModal>}
-      {detailWorkout && <EntryModal title={detailWorkout.title} description="운동 상세 내용" onClose={closeDetail}>
+      {detailWorkout && <EntryModal title={detailWorkout.title} onClose={closeDetail}>
         <WorkoutDetail workout={detailWorkout} />
         <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editWorkout(detailWorkout.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
       </EntryModal>}
-      {detailTransaction && <EntryModal title={detailTransaction.name} description="가계부 상세 내용" onClose={closeDetail}>
+      {detailTransaction && <EntryModal title={detailTransaction.name} onClose={closeDetail}>
         <TransactionDetail transaction={detailTransaction} />
         <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTransaction(detailTransaction.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
       </EntryModal>}
 
       {modal && (
-        <EntryModal title={editingId ? editModalTitle(modal) : modalTitle(modal)} description={modalDescription(modal)} onClose={closeModal}>
+        <EntryModal title={editingId ? editModalTitle(modal) : modalTitle(modal)} onClose={closeModal}>
           {formError && <p className="form-error" role="alert">{formError}</p>}
           {modal === "intake" && <IntakeForm parsed={intakeParsed} onParse={() => setIntakeParsed(true)} onSave={() => { closeModal(); setToast("오늘 계획을 등록했습니다."); }} />}
           {modal === "task" && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} defaultDate={todayDate} onSubmit={submitTask} />}
@@ -819,8 +816,8 @@ export function LifeFlowApp() {
   );
 }
 
-function PageHeading({ title, description, actions }: { title: string; description: string; actions?: React.ReactNode }) {
-  return <div className="page-heading"><div><h1>{title}</h1><p>{description}</p></div>{actions && <div className="heading-actions">{actions}</div>}</div>;
+function PageHeading({ title, actions }: { title: string; actions?: React.ReactNode }) {
+  return <div className="page-heading"><h1>{title}</h1>{actions && <div className="heading-actions">{actions}</div>}</div>;
 }
 
 function Panel({ title, meta, action, className = "", children }: { title: string; meta?: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
@@ -845,6 +842,7 @@ type PointerDrop = (clientX: number, clientY: number, id: string) => boolean;
 function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, moving = false }: { task: Task; onClick: () => void; onStartMove?: (id: string) => void; onEndMove?: () => void; onPointerDrop?: PointerDrop; moving?: boolean }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
+  const activePointerId = useRef<number | null>(null);
   const pointerDragging = useRef(false);
   const suppressClick = useRef(false);
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null);
@@ -870,7 +868,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
       }
       onClick();
     }}
-    draggable
+    draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts={onStartMove ? "Alt+M" : undefined}
     title={onStartMove ? "드래그하거나 Alt+M으로 이동" : undefined}
@@ -881,20 +879,21 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
         onStartMove(task.id);
       }
     }}
-    onDragStart={(event) => { event.dataTransfer.setData("text/plain", task.id); event.dataTransfer.effectAllowed = "move"; onStartMove?.(task.id); }}
-    onDragEnd={onEndMove}
     onPointerDown={(event) => {
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      if (event.button > 0) return;
+      activePointerId.current = event.pointerId;
       pointerStart.current = { x: event.clientX, y: event.clientY };
     }}
     onPointerMove={(event) => {
-      if (!onStartMove || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
+      if (!onStartMove || activePointerId.current !== event.pointerId) return;
       const offset = { x: event.clientX - pointerStart.current.x, y: event.clientY - pointerStart.current.y };
       if (Math.hypot(offset.x, offset.y) > 10) startPointerMove(event.pointerId);
       if (pointerDragging.current) setPointerOffset(offset);
     }}
     onPointerUp={(event) => {
-      if ((event.pointerType !== "touch" && event.pointerType !== "pen") || !pointerDragging.current) return;
+      if (activePointerId.current !== event.pointerId) return;
+      activePointerId.current = null;
+      if (!pointerDragging.current) return;
       pointerDragging.current = false;
       buttonRef.current?.releasePointerCapture?.(event.pointerId);
       const dropped = onPointerDrop?.(event.clientX, event.clientY, task.id) ?? false;
@@ -902,17 +901,9 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerDrop, movi
       setPointerOffset(null);
       window.setTimeout(() => { suppressClick.current = false; }, 0);
     }}
-    onPointerCancel={() => { pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove?.(); }}
+    onPointerCancel={() => { activePointerId.current = null; pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove?.(); }}
     onContextMenu={(event) => { if (onStartMove) event.preventDefault(); }}
   ><span>{task.title}</span><em>{task.priority}</em></button>;
-}
-
-function draggedTaskId(event: React.DragEvent<HTMLElement>) {
-  return event.dataTransfer.getData("text/plain") || undefined;
-}
-
-function draggedProjectId(event: React.DragEvent<HTMLElement>) {
-  return event.dataTransfer.getData("application/x-life-flow-project") || undefined;
 }
 
 function activateMoveTarget(event: React.KeyboardEvent<HTMLElement>, move: () => void) {
@@ -939,8 +930,6 @@ function WeekView({ weekStart, todayDate, tasks, onSelect, movingTaskId, onStart
       data-task-date={date}
       tabIndex={movingTaskId ? 0 : undefined}
       onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => { event.preventDefault(); onMoveToDate(date, draggedTaskId(event)); }}
     ><strong>{["월", "화", "수", "목", "금", "토", "일"][index]} {day}</strong>{tasks.filter((task) => task.scheduledDate === date).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
   })}</div>;
 }
@@ -973,8 +962,6 @@ function MonthView({ month, todayDate, tasks, onSelect, movingTaskId, onStartMov
               data-task-date={date}
               tabIndex={movingTaskId ? 0 : undefined}
               onKeyDown={(event) => activateMoveTarget(event, () => onMoveToDate(date))}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => { event.preventDefault(); onMoveToDate(date, draggedTaskId(event)); }}
             ><time dateTime={date}>{day}</time>{dayTasks.map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>;
           })}
         </div>)}
@@ -992,8 +979,6 @@ function TaskKanban({ tasks, onSelect, movingTaskId, onStartMove, onEndMove, onM
     aria-label={`${statusLabel[status]} 영역`}
     tabIndex={movingTaskId ? 0 : undefined}
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
-    onDragOver={(event) => event.preventDefault()}
-    onDrop={(event) => { event.preventDefault(); onMoveToStatus(status, draggedTaskId(event)); }}
   ><strong>{statusLabel[status]} · {tasks.filter((task) => task.status === status).length}</strong>{tasks.filter((task) => task.status === status).map((task) => <TaskButton key={task.id} task={task} moving={movingTaskId === task.id} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} onClick={() => onSelect(task.id)} />)}</div>)}</div>;
 }
 
@@ -1026,14 +1011,13 @@ function ProjectKanban({ projects, onSelect, movingProjectId, onStartMove, onEnd
     aria-label={`프로젝트 ${projectStatusLabel[status]} 영역`}
     tabIndex={movingProjectId ? 0 : undefined}
     onKeyDown={(event) => activateMoveTarget(event, () => onMoveToStatus(status))}
-    onDragOver={(event) => event.preventDefault()}
-    onDrop={(event) => { event.preventDefault(); onMoveToStatus(status, draggedProjectId(event)); }}
   ><strong>{projectStatusLabel[status]} · {projects.filter((project) => project.status === status).length}</strong>{projects.filter((project) => project.status === status).map((project) => <ProjectCard key={project.id} project={project} moving={movingProjectId === project.id} onSelect={onSelect} onStartMove={onStartMove} onEndMove={onEndMove} onPointerDrop={onPointerDrop} />)}</div>)}</div>;
 }
 
 function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPointerDrop }: { project: Project; moving: boolean; onSelect: (id: string) => void; onStartMove: (id: string) => void; onEndMove: () => void; onPointerDrop: PointerDrop }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pointerStart = useRef({ x: 0, y: 0 });
+  const activePointerId = useRef<number | null>(null);
   const pointerDragging = useRef(false);
   const suppressClick = useRef(false);
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null);
@@ -1051,7 +1035,7 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
     type="button"
     className={`${moving ? "project-card draggable-card moving" : "project-card draggable-card"}${pointerOffset ? " pointer-dragging" : ""}`}
     style={pointerOffset ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
-    draggable
+    draggable={false}
     aria-pressed={moving || undefined}
     aria-keyshortcuts="Alt+M"
     title="드래그하거나 Alt+M으로 이동"
@@ -1064,20 +1048,21 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
       onSelect(project.id);
     }}
     onKeyDown={(event) => { if (event.altKey && event.key.toLowerCase() === "m") { event.preventDefault(); event.stopPropagation(); onStartMove(project.id); } }}
-    onDragStart={(event) => { event.dataTransfer.setData("application/x-life-flow-project", project.id); event.dataTransfer.effectAllowed = "move"; onStartMove(project.id); }}
-    onDragEnd={onEndMove}
     onPointerDown={(event) => {
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      if (event.button > 0) return;
+      activePointerId.current = event.pointerId;
       pointerStart.current = { x: event.clientX, y: event.clientY };
     }}
     onPointerMove={(event) => {
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      if (activePointerId.current !== event.pointerId) return;
       const offset = { x: event.clientX - pointerStart.current.x, y: event.clientY - pointerStart.current.y };
       if (Math.hypot(offset.x, offset.y) > 10) startPointerMove(event.pointerId);
       if (pointerDragging.current) setPointerOffset(offset);
     }}
     onPointerUp={(event) => {
-      if ((event.pointerType !== "touch" && event.pointerType !== "pen") || !pointerDragging.current) return;
+      if (activePointerId.current !== event.pointerId) return;
+      activePointerId.current = null;
+      if (!pointerDragging.current) return;
       pointerDragging.current = false;
       buttonRef.current?.releasePointerCapture?.(event.pointerId);
       const dropped = onPointerDrop(event.clientX, event.clientY, project.id);
@@ -1085,7 +1070,7 @@ function ProjectCard({ project, moving, onSelect, onStartMove, onEndMove, onPoin
       setPointerOffset(null);
       window.setTimeout(() => { suppressClick.current = false; }, 0);
     }}
-    onPointerCancel={() => { pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove(); }}
+    onPointerCancel={() => { activePointerId.current = null; pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove(); }}
     onContextMenu={(event) => event.preventDefault()}
   ><strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {project.progress}%</span></button>;
 }
@@ -1094,10 +1079,9 @@ function ProjectDetail({ project }: { project: Project }) {
   return <div className="detail-content"><div className="detail-grid"><div><span>상태</span><strong>{projectStatusLabel[project.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[project.priority]}</strong></div><div><span>진행률</span><strong>{project.progress}%</strong></div><div><span>목표 완료일</span><strong>{displayDate(project.dueDate)}</strong></div></div><div className="description"><span>프로젝트 설명</span><p>{project.description}</p></div></div>;
 }
 
-function EntryModal({ title, description, onClose, children }: { title: string; description: string; onClose: () => void; children: React.ReactNode }) {
+function EntryModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const modalRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const descriptionId = useId();
 
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1141,7 +1125,7 @@ function EntryModal({ title, description, onClose, children }: { title: string; 
     };
   }, [onClose]);
 
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}><div className="modal-heading"><button type="button" className="modal-back-button" onClick={onClose} aria-label="뒤로가기"><span aria-hidden="true">‹</span> 뒤로</button><div className="modal-heading-copy"><h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p></div><button type="button" className="close-button" onClick={onClose} aria-label="닫기">×</button></div>{children}</div></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="modal-heading"><button type="button" className="modal-back-button" onClick={onClose} aria-label="뒤로가기"><span aria-hidden="true">‹</span> 뒤로</button><div className="modal-heading-copy"><h2 id={titleId}>{title}</h2></div><button type="button" className="close-button" onClick={onClose} aria-label="닫기">×</button></div>{children}</div></div>;
 }
 
 function ModalActions({ submitLabel }: { submitLabel: string }) {
@@ -1182,14 +1166,4 @@ function modalTitle(modal: Exclude<ModalName, null>) {
 
 function editModalTitle(modal: Exclude<ModalName, null>) {
   return { intake: "오늘 계획 수정", task: "할 일 수정", project: "프로젝트 수정", workout: "운동 수정", money: "가계부 거래 수정" }[modal];
-}
-
-function modalDescription(modal: Exclude<ModalName, null>) {
-  return {
-    intake: "자연어를 일정·할 일·운동으로 나눕니다.",
-    task: "상세 내용과 우선순위를 함께 기록합니다.",
-    project: "프로젝트의 목적과 첫 마일스톤을 정합니다.",
-    workout: "운동 정보와 세트 내용을 입력합니다.",
-    money: "수입과 지출을 +/- 흐름으로 구분해 기록합니다."
-  }[modal];
 }
