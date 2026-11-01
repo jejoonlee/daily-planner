@@ -505,6 +505,27 @@ export function LifeFlowApp() {
     setModal("money");
   }
 
+  function deleteTask(id: string) {
+    setTasks((current) => current.filter((task) => task.id !== id));
+    endTaskMove();
+    closeDetail();
+    setToast("할 일을 삭제했습니다.");
+  }
+
+  function deleteWorkout(id: string) {
+    setWorkouts((current) => current.filter((workout) => workout.id !== id));
+    closeDetail();
+    setToast("운동 기록을 삭제했습니다.");
+  }
+
+  function deleteTransaction(id: string) {
+    const remaining = transactions.filter((transaction) => transaction.id !== id);
+    setTransactions((current) => current.filter((transaction) => transaction.id !== id));
+    setSelectedCategories((current) => current.filter((category) => remaining.some((transaction) => transaction.category === category)));
+    closeDetail();
+    setToast("가계부 거래를 삭제했습니다.");
+  }
+
   function submitTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed = taskSchema.safeParse(formDataValues(new FormData(event.currentTarget)));
@@ -713,6 +734,7 @@ export function LifeFlowApp() {
                   <ListRow title="점심 약속" detail="개인 · 강남" value="12:30" />
                 </Panel>
                 <Panel title="오늘 할 일" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
+                  {todayTasks.length === 0 && <p className="empty-records">오늘 예정된 할 일이 없습니다.</p>}
                   {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => { navigate("tasks"); openTaskDetail(task.id); }} />)}
                 </Panel>
                 <Panel title="오늘 운동" action={<button className="text-button" onClick={() => navigate("workouts")}>상세</button>}>
@@ -799,6 +821,7 @@ export function LifeFlowApp() {
             <section>
               <PageHeading title="운동 관리" actions={<button className="primary-button" onClick={() => setModal("workout")}>+ 운동 기록</button>} />
               <div className="record-card-grid">
+                {workouts.length === 0 && <p className="empty-records">운동 기록이 없습니다.</p>}
                 {workouts.map((workout) => <button type="button" className="record-card" key={workout.id} onClick={() => setDetailItem({ kind: "workout", id: workout.id })}><span>{displayDate(workout.startedAt)}</span><strong>{workout.title}</strong><small>{workout.place} · {workout.durationMinutes}분</small><small>{workout.exercise} · {workout.sets}세트 × {workout.reps}회 · {workout.weightKg}kg</small></button>)}
               </div>
             </section>
@@ -828,6 +851,7 @@ export function LifeFlowApp() {
                 </details>
               </div>
               <Panel title="거래 내역" meta={`${filteredTransactions.length}건`}>
+                {filteredTransactions.length === 0 && <p className="empty-records">선택한 조건에 해당하는 거래 내역이 없습니다.</p>}
                 <div className="transaction-card-list">{filteredTransactions.map((transaction) => <button type="button" className="transaction-card" key={transaction.id} onClick={() => setDetailItem({ kind: "transaction", id: transaction.id })}><span>{displayDate(transaction.happenedAt)}</span><span><strong>{transaction.name}</strong><small>{transaction.merchant} · {transaction.category}</small></span><strong className={transaction.flow}>{signedWon(transactionValue(transaction))}</strong></button>)}</div>
               </Panel>
             </section>
@@ -856,15 +880,15 @@ export function LifeFlowApp() {
       </EntryModal>}
       {detailTask && <EntryModal title={detailTask.title} onClose={closeDetail}>
         <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
-        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTask(detailTask.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+        <RecordActions key={detailTask.id} name={detailTask.title} kind="할 일" onEdit={() => editTask(detailTask.id)} onDelete={() => deleteTask(detailTask.id)} onClose={closeDetail} />
       </EntryModal>}
       {detailWorkout && <EntryModal title={detailWorkout.title} onClose={closeDetail}>
         <WorkoutDetail workout={detailWorkout} />
-        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editWorkout(detailWorkout.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+        <RecordActions key={detailWorkout.id} name={detailWorkout.title} kind="운동 기록" onEdit={() => editWorkout(detailWorkout.id)} onDelete={() => deleteWorkout(detailWorkout.id)} onClose={closeDetail} />
       </EntryModal>}
       {detailTransaction && <EntryModal title={detailTransaction.name} onClose={closeDetail}>
         <TransactionDetail transaction={detailTransaction} />
-        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editTransaction(detailTransaction.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+        <RecordActions key={detailTransaction.id} name={detailTransaction.name} kind="가계부 거래" onEdit={() => editTransaction(detailTransaction.id)} onDelete={() => deleteTransaction(detailTransaction.id)} onClose={closeDetail} />
       </EntryModal>}
 
       {modal && (
@@ -883,7 +907,22 @@ export function LifeFlowApp() {
 }
 
 function PageHeading({ title, actions }: { title: string; actions?: React.ReactNode }) {
-  return <div className="page-heading"><h1>{title}</h1>{actions && <div className="heading-actions">{actions}</div>}</div>;
+  return <div className="page-heading"><h1 tabIndex={-1}>{title}</h1>{actions && <div className="heading-actions">{actions}</div>}</div>;
+}
+
+function RecordActions({ name, kind, onEdit, onDelete, onClose }: { name: string; kind: string; onEdit: () => void; onDelete: () => void; onClose: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { (confirming ? cancelButton : deleteButton).current?.focus(); }, [confirming]);
+
+  if (confirming) return <section className="delete-confirmation" role="group" aria-label="삭제 확인">
+    <strong>{kind} 삭제</strong>
+    <p>‘{name}’ 항목을 삭제할까요?</p>
+    <div className="detail-actions"><button ref={cancelButton} className="secondary-button" type="button" onClick={() => setConfirming(false)}>취소</button><button className="danger-button" type="button" onClick={onDelete}>삭제하기</button></div>
+  </section>;
+
+  return <div className="detail-actions"><button ref={deleteButton} className="secondary-button delete-button" type="button" onClick={() => setConfirming(true)}>삭제</button><button className="primary-button" type="button" onClick={onEdit}>수정</button><button className="secondary-button" type="button" onClick={onClose}>닫기</button></div>;
 }
 
 function Panel({ title, meta, action, className = "", children }: { title: string; meta?: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
@@ -1217,7 +1256,8 @@ function EntryModal({ title, onClose, children }: { title: string; onClose: () =
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousBodyOverflow;
-      previouslyFocused?.focus();
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      else document.querySelector<HTMLElement>(".page-heading h1")?.focus();
     };
   }, [onClose]);
 

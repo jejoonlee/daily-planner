@@ -21,6 +21,83 @@ afterEach(() => {
 });
 
 describe("LifeFlowApp", () => {
+  it("할 일 삭제를 취소하면 유지하고 확정하면 주 월 칸반과 오늘 할 일에서 제거한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    const task = screen.getByRole("button", { name: /병원 예약하기/ });
+    task.focus();
+    fireEvent.click(task);
+    let detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    let confirmation = within(detail.getByRole("group", { name: "삭제 확인" }));
+    expect(confirmation.getByText("‘병원 예약하기’ 항목을 삭제할까요?")).toBeInTheDocument();
+    expect(confirmation.getByRole("button", { name: "취소" })).toHaveFocus();
+    fireEvent.click(confirmation.getByRole("button", { name: "취소" }));
+    expect(detail.queryByRole("group", { name: "삭제 확인" })).not.toBeInTheDocument();
+    expect(detail.getByRole("button", { name: "삭제" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    const original = screen.getByRole("button", { name: /병원 예약하기/ });
+    original.focus();
+    fireEvent.click(original);
+    detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    confirmation = within(detail.getByRole("group", { name: "삭제 확인" }));
+    fireEvent.click(confirmation.getByRole("button", { name: "삭제하기" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "할 일" })).toHaveFocus();
+    for (const view of ["주", "월", "칸반"]) {
+      fireEvent.click(screen.getByRole("button", { name: view }));
+      expect(screen.queryByRole("button", { name: /병원 예약하기/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /배포 문서 리뷰/ })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "홈" }));
+    expect(screen.queryByRole("button", { name: /병원 예약하기/ })).not.toBeInTheDocument();
+    expect(screen.getByText("오늘 예정된 할 일이 없습니다.")).toBeInTheDocument();
+  });
+
+  it("운동 삭제 확인을 ESC로 닫으면 유지하고 확정하면 빈 목록과 새 등록을 표시한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "운동" }));
+    fireEvent.click(screen.getByRole("button", { name: /하체 근력 운동/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "삭제" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /하체 근력 운동/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /하체 근력 운동/ }));
+    const detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    fireEvent.click(detail.getByRole("button", { name: "삭제하기" }));
+    expect(screen.queryByRole("button", { name: /하체 근력 운동/ })).not.toBeInTheDocument();
+    expect(screen.getByText("운동 기록이 없습니다.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "+ 운동 기록" }));
+    expect(screen.getByRole("dialog", { name: "운동 기록" })).toBeInTheDocument();
+  });
+
+  it("가계부 삭제는 선택 거래만 제거하고 건수 월 잔액과 필터를 갱신한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "가계부" }));
+    const summary = within(screen.getByText("이번 달 잔액").closest("article")!);
+    expect(summary.getByText("+4,182,500원")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("카테고리 전체"));
+    fireEvent.click(screen.getByLabelText("소비 › 카페·간식"));
+    fireEvent.click(screen.getByRole("button", { name: /커피/ }));
+    const detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    fireEvent.click(detail.getByRole("button", { name: "취소" }));
+    expect(summary.getByText("+4,182,500원")).toBeInTheDocument();
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    fireEvent.click(detail.getByRole("button", { name: "삭제하기" }));
+    expect(screen.queryByRole("button", { name: /커피/ })).not.toBeInTheDocument();
+    expect(screen.getByText("2건")).toBeInTheDocument();
+    expect(summary.getByText("+4,188,000원")).toBeInTheDocument();
+    expect(summary.getByText("수입 4,200,000원 · 지출 12,000원")).toBeInTheDocument();
+    expect(screen.getByText("카테고리 전체")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /월급/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /점심/ })).toBeInTheDocument();
+  });
+
   it("할 일을 기존 값으로 수정하고 상태와 마감일을 유지한다", () => {
     render(createElement(LifeFlowApp));
     login();
