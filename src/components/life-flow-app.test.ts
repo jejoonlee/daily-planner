@@ -21,6 +21,28 @@ afterEach(() => {
 });
 
 describe("LifeFlowApp", () => {
+  it("홈의 오늘 할 일은 상세 열기 닫기 수정 후에도 홈을 유지하고 전체 보기만 탭을 이동한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    const home = screen.getByRole("button", { name: "홈" });
+    fireEvent.click(screen.getByRole("button", { name: /병원 예약하기/ }));
+    expect(screen.getByRole("dialog", { name: "병원 예약하기" })).toBeInTheDocument();
+    expect(home).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "좋은 아침이에요" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "뒤로가기" }));
+    expect(home).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: /병원 예약하기/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "검진 예약 확인" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(home).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /검진 예약 확인/ })).toBeInTheDocument();
+    const todayPanel = screen.getByText("오늘 할 일").closest("article")!;
+    fireEvent.click(within(todayPanel).getByRole("button", { name: "전체 보기" }));
+    expect(screen.getByRole("button", { name: "할 일" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "할 일 보기" })).toBeInTheDocument();
+  });
+
   it("프로젝트 삭제를 취소하면 유지하고 확정하면 연결된 할 일을 보존한 채 연결만 해제한다", () => {
     render(createElement(LifeFlowApp));
     login();
@@ -92,7 +114,10 @@ describe("LifeFlowApp", () => {
     confirmation = within(detail.getByRole("group", { name: "삭제 확인" }));
     fireEvent.click(confirmation.getByRole("button", { name: "삭제하기" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "할 일" })).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "좋은 아침이에요" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "홈" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("오늘 예정된 할 일이 없습니다.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
     for (const view of ["주", "월", "칸반"]) {
       fireEvent.click(screen.getByRole("button", { name: view }));
       expect(screen.queryByRole("button", { name: /병원 예약하기/ })).not.toBeInTheDocument();

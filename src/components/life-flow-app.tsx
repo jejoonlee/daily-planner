@@ -744,7 +744,7 @@ export function LifeFlowApp() {
                 </Panel>
                 <Panel title="오늘 할 일" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
                   {todayTasks.length === 0 && <p className="empty-records">오늘 예정된 할 일이 없습니다.</p>}
-                  {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => { navigate("tasks"); openTaskDetail(task.id); }} />)}
+                  {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => openTaskDetail(task.id)} />)}
                 </Panel>
                 <Panel title="오늘 운동" action={<button className="text-button" onClick={() => navigate("workouts")}>상세</button>}>
                   {workouts.slice(0, 1).map((workout) => <ListRow key={workout.id} title={workout.title} detail={`${workout.place} · ${workout.durationMinutes}분`} value="19:00" />)}
