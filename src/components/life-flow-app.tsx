@@ -512,6 +512,15 @@ export function LifeFlowApp() {
     setToast("할 일을 삭제했습니다.");
   }
 
+  function deleteProject(id: string) {
+    setProjects((current) => current.filter((project) => project.id !== id));
+    setTasks((current) => current.map((task) => task.projectId === id ? { ...task, projectId: undefined } : task));
+    endProjectMove();
+    endTaskMove();
+    closeDetail();
+    setToast("프로젝트를 삭제했습니다.");
+  }
+
   function deleteWorkout(id: string) {
     setWorkouts((current) => current.filter((workout) => workout.id !== id));
     closeDetail();
@@ -876,7 +885,7 @@ export function LifeFlowApp() {
 
       {detailProject && <EntryModal title={detailProject.name} onClose={closeDetail}>
         <ProjectDetail project={detailProject} />
-        <div className="detail-actions"><button className="primary-button" type="button" onClick={() => editProject(detailProject.id)}>수정</button><button className="secondary-button" type="button" onClick={closeDetail}>닫기</button></div>
+        <RecordActions key={detailProject.id} name={detailProject.name} kind="프로젝트" confirmationNote={`연결된 할 일 ${tasks.filter((task) => task.projectId === detailProject.id).length}개는 유지되며 프로젝트 연결이 해제됩니다.`} onEdit={() => editProject(detailProject.id)} onDelete={() => deleteProject(detailProject.id)} onClose={closeDetail} />
       </EntryModal>}
       {detailTask && <EntryModal title={detailTask.title} onClose={closeDetail}>
         <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
@@ -910,7 +919,7 @@ function PageHeading({ title, actions }: { title: string; actions?: React.ReactN
   return <div className="page-heading"><h1 tabIndex={-1}>{title}</h1>{actions && <div className="heading-actions">{actions}</div>}</div>;
 }
 
-function RecordActions({ name, kind, onEdit, onDelete, onClose }: { name: string; kind: string; onEdit: () => void; onDelete: () => void; onClose: () => void }) {
+function RecordActions({ name, kind, confirmationNote, onEdit, onDelete, onClose }: { name: string; kind: string; confirmationNote?: string; onEdit: () => void; onDelete: () => void; onClose: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -919,6 +928,7 @@ function RecordActions({ name, kind, onEdit, onDelete, onClose }: { name: string
   if (confirming) return <section className="delete-confirmation" role="group" aria-label="삭제 확인">
     <strong>{kind} 삭제</strong>
     <p>‘{name}’ 항목을 삭제할까요?</p>
+    {confirmationNote && <p>{confirmationNote}</p>}
     <div className="detail-actions"><button ref={cancelButton} className="secondary-button" type="button" onClick={() => setConfirming(false)}>취소</button><button className="danger-button" type="button" onClick={onDelete}>삭제하기</button></div>
   </section>;
 

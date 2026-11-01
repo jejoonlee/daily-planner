@@ -21,6 +21,54 @@ afterEach(() => {
 });
 
 describe("LifeFlowApp", () => {
+  it("프로젝트 삭제를 취소하면 유지하고 확정하면 연결된 할 일을 보존한 채 연결만 해제한다", () => {
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: /CJ ENM 대만 오픈/ }));
+    let detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    expect(detail.getByText("연결된 할 일 2개는 유지되며 프로젝트 연결이 해제됩니다.")).toBeInTheDocument();
+    fireEvent.click(detail.getByRole("button", { name: "취소" }));
+    expect(screen.getByRole("dialog", { name: "CJ ENM 대만 오픈" })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("button", { name: /CJ ENM 대만 오픈/ })).toBeInTheDocument();
+    expect(screen.getByText("3개")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /CJ ENM 대만 오픈/ }));
+    detail = within(screen.getByRole("dialog"));
+    fireEvent.click(detail.getByRole("button", { name: "삭제" }));
+    fireEvent.click(detail.getByRole("button", { name: "삭제하기" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CJ ENM 대만 오픈/ })).not.toBeInTheDocument();
+    expect(screen.getByText("2개")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /개인 생활 시스템/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "칸반" }));
+    for (const title of ["테스트 시나리오 정리", "와이어프레임 피드백 반영", "배포 문서 리뷰", "병원 예약하기"]) {
+      expect(screen.getByRole("button", { name: new RegExp(title) })).toBeInTheDocument();
+    }
+    expect(within(screen.getByRole("group", { name: "진행 중 영역" })).getByRole("button", { name: /테스트 시나리오 정리/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /테스트 시나리오 정리/ }));
+    detail = within(screen.getByRole("dialog"));
+    expect(detail.getByText("프로젝트 없음")).toBeInTheDocument();
+    fireEvent.click(detail.getByRole("button", { name: "수정" }));
+    expect(screen.getByLabelText("프로젝트")).toHaveValue("");
+    expect(screen.getByLabelText("예정일")).toHaveValue("2026-08-26");
+    expect(screen.getByLabelText("마감일")).toHaveValue("2026-08-26");
+    expect(screen.getByLabelText("우선순위")).toHaveValue("P1");
+    expect(within(screen.getByLabelText("프로젝트")).queryByRole("option", { name: "CJ ENM 대만 오픈" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    fireEvent.click(screen.getByRole("button", { name: /와이어프레임 피드백 반영/ }));
+    expect(within(screen.getByRole("dialog")).getByText("개인 생활 시스템")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: /배포 문서 리뷰/ }));
+    expect(within(screen.getByRole("dialog")).getByText("프로젝트 없음")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "홈" }));
+    expect(screen.queryByRole("button", { name: /CJ ENM 대만 오픈/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /개인 생활 시스템/ })).toBeInTheDocument();
+  });
+
   it("할 일 삭제를 취소하면 유지하고 확정하면 주 월 칸반과 오늘 할 일에서 제거한다", () => {
     render(createElement(LifeFlowApp));
     login();
