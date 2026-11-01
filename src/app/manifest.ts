@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "일정, 할 일, 운동, 돈 관리를 한곳에서 관리합니다.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f5f6f8",
-    theme_color: "#202124",
+    background_color: "#f7f6f2",
+    theme_color: "#f7f6f2",
     lang: "ko-KR",
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },

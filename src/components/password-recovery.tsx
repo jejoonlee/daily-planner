@@ -3,6 +3,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loginSchema } from "@/lib/validation";
+import { ThemeControls } from "./theme-controls";
 
 export function PasswordRecovery({ client, mode, onClose }: {
   client: SupabaseClient | null;
@@ -51,7 +52,7 @@ export function PasswordRecovery({ client, mode, onClose }: {
     }
   }
 
-  return <main className="login-page"><form className="login-card" onSubmit={submit}>
+  return <main className="login-page"><div className="login-theme"><ThemeControls /></div><form className="login-card" onSubmit={submit}>
     <div className="brand"><span className="brand-mark">L</span><span>Life Flow</span></div>
     <h1>{mode === "forgot" ? "비밀번호 찾기" : "새 비밀번호 설정"}</h1>
     <p>{mode === "forgot" ? "가입한 이메일로 비밀번호 재설정 링크를 요청하세요." : "새 비밀번호를 8자 이상 입력해 주세요."}</p>

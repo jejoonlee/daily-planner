@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { ThemeRuntime } from "@/components/theme-controls";
+import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,17 +9,13 @@ export const metadata: Metadata = {
   applicationName: "Life Flow"
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f6f8" },
-    { media: "(prefers-color-scheme: dark)", color: "#17181b" }
-  ]
-};
+export const viewport: Viewport = { themeColor: "#f7f6f2", viewportFit: "cover" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
-      <body>{children}</body>
+    <html lang="ko" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeInitScript }} /></head>
+      <body><ThemeRuntime />{children}</body>
     </html>
   );
 }

@@ -10,6 +10,7 @@ function login() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-28T09:00:00+09:00"));
 });
@@ -179,12 +180,13 @@ describe("LifeFlowApp", () => {
     Object.defineProperty(document, "elementFromPoint", { configurable: true, value: undefined });
   });
 
-  it("할 일을 회사 개인 성당으로 구분하고 개인과 성당에서는 프로젝트를 숨긴다", () => {
+  it("회사 개인을 기본으로 표시하고 추가한 성당 구분으로 등록 필터 수정한다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "할 일" }));
 
     const areaFilter = screen.getByRole("group", { name: "할 일 구분" });
+    expect(within(areaFilter).getAllByRole("button").map((button) => button.textContent)).toEqual(["전체", "회사", "개인"]);
     fireEvent.click(within(areaFilter).getByRole("button", { name: "개인" }));
     expect(screen.getByRole("button", { name: /병원 예약하기/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /배포 문서 리뷰/ })).not.toBeInTheDocument();
@@ -195,7 +197,11 @@ describe("LifeFlowApp", () => {
     expect(screen.getByLabelText("프로젝트")).toBeInTheDocument();
     fireEvent.change(areaSelect, { target: { value: "personal" } });
     expect(screen.queryByLabelText("프로젝트")).not.toBeInTheDocument();
-    fireEvent.change(areaSelect, { target: { value: "church" } });
+    const form = within(screen.getByRole("dialog"));
+    fireEvent.click(form.getByRole("button", { name: "+ 구분 추가" }));
+    fireEvent.change(form.getByLabelText("새 구분 이름"), { target: { value: "성당" } });
+    fireEvent.click(form.getByRole("button", { name: "구분 추가하기" }));
+    expect(areaSelect).toHaveValue("성당");
     expect(screen.queryByLabelText("프로젝트")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "성당 봉사 일정 확인" } });
     fireEvent.click(screen.getByRole("button", { name: "할 일 저장" }));
@@ -207,6 +213,30 @@ describe("LifeFlowApp", () => {
     const detail = screen.getByRole("dialog", { name: "성당 봉사 일정 확인" });
     expect(within(detail).getByText("성당")).toBeInTheDocument();
     expect(within(detail).queryByText("프로젝트")).not.toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "수정" }));
+    expect(screen.getByLabelText("구분")).toHaveValue("성당");
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "변경한 봉사 일정" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    expect(screen.getByRole("button", { name: /변경한 봉사 일정/ })).toHaveTextContent("성당 · P1");
+  });
+
+  it("목록에서 추가한 구분은 중복을 막고 앱을 다시 열어도 선택할 수 있다", () => {
+    const app = render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ 구분 추가" }));
+    fireEvent.change(screen.getByLabelText("새 구분 이름"), { target: { value: "  회사  " } });
+    fireEvent.click(screen.getByRole("button", { name: "구분 추가하기" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("이미 있는 구분");
+    fireEvent.change(screen.getByLabelText("새 구분 이름"), { target: { value: "  공부  " } });
+    fireEvent.keyDown(screen.getByLabelText("새 구분 이름"), { key: "Enter" });
+    expect(within(screen.getByRole("group", { name: "할 일 구분" })).getByRole("button", { name: "공부" })).toBeInTheDocument();
+    app.unmount();
+    render(createElement(LifeFlowApp));
+    login();
+    fireEvent.click(screen.getByRole("button", { name: "할 일" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ 할 일" }));
+    expect(within(screen.getByLabelText("구분")).getByRole("option", { name: "공부" })).toBeInTheDocument();
   });
 
   it("월 보기에서 할 일 카드를 다른 날짜로 옮긴다", () => {

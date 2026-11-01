@@ -25,7 +25,7 @@ export const loginSchema = z.object({
 export const taskSchema = z.object({
   title: z.string().trim().min(1, "할 일 제목을 입력해 주세요."),
   description: z.string().trim().min(1, "할 일 상세 내용을 입력해 주세요."),
-  area: z.enum(["company", "personal", "church"]),
+  area: z.string().trim().min(1, "구분을 선택해 주세요.").max(32, "구분은 32자 이내로 입력해 주세요."),
   projectId: z.string().trim().optional().transform((value) => value || undefined),
   priority: priorityValue,
   scheduledDate: dateValue,

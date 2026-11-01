@@ -2,8 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { PasswordRecovery } from "./password-recovery";
+import { ThemeControls } from "./theme-controls";
 import { initialProjects, initialTasks, initialTransactions, initialWorkouts } from "@/lib/sample-data";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase-client";
+import { taskAreaLabel, useTaskAreas } from "@/lib/task-areas";
 import type { ModalName, PageName, Priority, Project, Task, TaskArea, TaskStatus, Transaction, Workout } from "@/lib/types";
 import { firstValidationError, formDataValues, loginSchema, projectSchema, taskSchema, transactionSchema, workoutSchema } from "@/lib/validation";
 
@@ -34,12 +36,6 @@ const statusLabel: Record<TaskStatus, string> = {
   todo: "할 일",
   doing: "진행 중",
   done: "완료"
-};
-
-const taskAreaLabel: Record<TaskArea, string> = {
-  company: "회사",
-  personal: "개인",
-  church: "성당"
 };
 
 const projectStatusLabel: Record<ProjectStatus, string> = {
@@ -140,6 +136,7 @@ export function LifeFlowApp() {
   const [todayDate, setTodayDate] = useState(() => dateKeyInTimeZone(new Date()));
   const currentMonth = todayDate.slice(0, 7);
   const [authenticated, setAuthenticated] = useState(false);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(process.env.NODE_ENV === "test" || !hasSupabaseConfig);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -176,6 +173,7 @@ export function LifeFlowApp() {
     return initialTransactions.map((transaction, index) => ({ ...transaction, happenedAt: dates[index] ?? transaction.happenedAt }));
   });
   const [taskView, setTaskView] = useState<"week" | "month" | "kanban">("week");
+  const { areas: taskAreas, addArea: addTaskArea } = useTaskAreas(accountId ?? "demo", tasks.map((task) => task.area));
   const [selectedTaskArea, setSelectedTaskArea] = useState<"all" | TaskArea>("all");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
@@ -230,6 +228,7 @@ export function LifeFlowApp() {
         else setAuthError("재설정 링크가 만료되었습니다. 비밀번호 찾기에서 메일을 다시 요청해 주세요.");
       }
       setAuthenticated(Boolean(data.session));
+      setAccountId(data.session?.user.id ?? null);
       setAuthReady(true);
     }).catch(() => {
       if (active) {
@@ -245,6 +244,7 @@ export function LifeFlowApp() {
         }
         if (event === "SIGNED_OUT") setRecoveryMode(null);
         setAuthenticated(Boolean(session));
+        setAccountId(session?.user.id ?? null);
         setAuthReady(true);
       }
     });
@@ -446,6 +446,7 @@ export function LifeFlowApp() {
         }
         form.reset();
         if (data.session) {
+          setAccountId(data.session.user.id);
           setAuthenticated(true);
         } else {
           setAuthMode("login");
@@ -467,6 +468,7 @@ export function LifeFlowApp() {
       if (supabase) await supabase.auth.signOut();
     } finally {
       setAuthenticated(false);
+      setAccountId(null);
       setPage("dashboard");
     }
   }
@@ -511,6 +513,10 @@ export function LifeFlowApp() {
       return;
     }
     const data = parsed.data;
+    if (!taskAreas.includes(data.area)) {
+      setFormError("목록에서 구분을 선택하거나 새 구분을 추가해 주세요.");
+      return;
+    }
     const task: Task = {
       ...tasks.find((item) => item.id === editingId),
       id: editingId ?? uid("task"),
@@ -641,6 +647,7 @@ export function LifeFlowApp() {
   if (!authenticated) {
     return (
       <main className="login-page">
+        <div className="login-theme"><ThemeControls /></div>
         <form className="login-card" onSubmit={submitLogin}>
           <div className="brand"><span className="brand-mark">L</span><span>Life Flow</span></div>
           <div>
@@ -683,12 +690,13 @@ export function LifeFlowApp() {
             </button>
           ))}
         </div>
+        <div className="notebook-mark" aria-hidden="true"><span>나의 기록장</span><span>한 장씩, 나의 속도로.</span></div>
       </nav>
 
       <main className="app-main">
         <header className="app-header">
-          <span>{pageTitles[page]}</span>
-          <span className="header-date">{fullDateLabel(todayDate)} · 서울</span>
+          <span className="header-path"><span>나의 기록장</span><span aria-hidden="true">/</span>{pageTitles[page]}</span>
+          <div className="header-tools"><span className="header-date">{fullDateLabel(todayDate)}</span><ThemeControls /></div>
         </header>
         <div className="page-content">
           {toast && <div className="toast" role="status">{toast}</div>}
@@ -746,8 +754,9 @@ export function LifeFlowApp() {
                 <h2>할 일 보기</h2>
               </div>
               <div className="segmented task-area-filter" role="group" aria-label="할 일 구분">
-                {(["all", "company", "personal", "church"] as const).map((area) => <button key={area} type="button" className={selectedTaskArea === area ? "active" : ""} onClick={() => { endTaskMove(); setSelectedTaskArea(area); }}>{area === "all" ? "전체" : taskAreaLabel[area]}</button>)}
+                {["all", ...taskAreas].map((area) => <button key={area} type="button" className={selectedTaskArea === area ? "active" : ""} onClick={() => { endTaskMove(); setSelectedTaskArea(area); }}>{area === "all" ? "전체" : taskAreaLabel(area)}</button>)}
               </div>
+              <TaskAreaAdder onAdd={addTaskArea} />
               {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={endTaskMove}>취소</button></div>}
               <div className="view-toolbar">
                 <div className="segmented">
@@ -827,6 +836,7 @@ export function LifeFlowApp() {
           {page === "settings" && (
             <section>
               <PageHeading title="설정" />
+              <section className="panel settings-panel appearance-panel" aria-label="화면 설정"><div className="panel-heading"><strong>화면 모드</strong></div><ThemeControls /></section>
               <form className="panel settings-panel" onSubmit={(event) => { event.preventDefault(); setToast("설정을 저장했습니다."); }}>
                 <div className="panel-heading"><strong>알림 설정</strong><span>Asia/Seoul</span></div>
                 <label className="setting-row"><span><strong>아침 계획 알림</strong><small>일정·할 일·운동 입력을 요청합니다.</small></span><input type="checkbox" checked={notificationEnabled} onChange={(event) => setNotificationEnabled(event.target.checked)} /></label>
@@ -861,7 +871,7 @@ export function LifeFlowApp() {
         <EntryModal title={editingId ? editModalTitle(modal) : modalTitle(modal)} onClose={closeModal}>
           {formError && <p className="form-error" role="alert">{formError}</p>}
           {modal === "intake" && <IntakeForm parsed={intakeParsed} onParse={() => setIntakeParsed(true)} onSave={() => { closeModal(); setToast("오늘 계획을 등록했습니다."); }} />}
-          {modal === "task" && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} defaultDate={todayDate} onSubmit={submitTask} />}
+          {modal === "task" && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} areas={taskAreas} onAddArea={addTaskArea} defaultDate={todayDate} onSubmit={submitTask} />}
           {modal === "project" && <ProjectForm initial={projects.find((item) => item.id === editingId)} defaultDate={shiftDate(todayDate, 30)} onSubmit={submitProject} />}
           {modal === "workout" && <WorkoutForm initial={workouts.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitWorkout} />}
           {modal === "money" && <TransactionForm initial={transactions.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitTransaction} />}
@@ -924,6 +934,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onP
   return <button
     ref={buttonRef}
     type="button"
+    data-note-color={task.area === "company" ? "yellow" : task.area === "personal" ? "green" : "purple"}
     className={`${moving ? "task-button draggable-card moving" : "task-button draggable-card"}${visiblePointerOffset ? " pointer-dragging" : ""}`}
     style={visiblePointerOffset ? { transform: `translate3d(${visiblePointerOffset.x}px, ${visiblePointerOffset.y}px, 0)` } : undefined}
     onClick={(event) => {
@@ -972,7 +983,7 @@ function TaskButton({ task, onClick, onStartMove, onEndMove, onPointerHover, onP
     }}
     onPointerCancel={() => { activePointerId.current = null; pointerDragging.current = false; suppressClick.current = false; setPointerOffset(null); onEndMove?.(); }}
     onContextMenu={(event) => { if (onStartMove) event.preventDefault(); }}
-  ><span>{task.title}</span><em>{taskAreaLabel[task.area]} · {task.priority}</em></button>;
+  ><span>{task.title}</span><em>{taskAreaLabel(task.area)} · {task.priority}</em></button>;
 }
 
 function activateMoveTarget(event: React.KeyboardEvent<HTMLElement>, move: () => void) {
@@ -1054,7 +1065,7 @@ function TaskKanban({ tasks, onSelect, movingTaskId, activeDropTarget, onStartMo
 }
 
 function TaskDetail({ task, project }: { task: Task; project?: Project }) {
-  return <div className="detail-content"><div className="detail-grid"><div><span>구분</span><strong>{taskAreaLabel[task.area]}</strong></div>{task.area === "company" && <div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div>}<div><span>상태</span><strong>{statusLabel[task.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>예정일</span><strong>{displayDate(task.scheduledDate)}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></div>;
+  return <div className="detail-content"><div className="detail-grid"><div><span>구분</span><strong>{taskAreaLabel(task.area)}</strong></div>{task.area === "company" && <div><span>프로젝트</span><strong>{project?.name ?? "프로젝트 없음"}</strong></div>}<div><span>상태</span><strong>{statusLabel[task.status]}</strong></div><div><span>우선순위</span><strong>{priorityLabel[task.priority]}</strong></div><div><span>예정일</span><strong>{displayDate(task.scheduledDate)}</strong></div><div><span>마감</span><strong>{displayDate(task.dueDate)}</strong></div><div><span>예상 시간</span><strong>{task.estimatedMinutes}분</strong></div></div><div className="description"><span>상세 내용</span><p>{task.description}</p></div></div>;
 }
 
 function WorkoutDetail({ workout }: { workout: Workout }) {
@@ -1221,9 +1232,51 @@ function IntakeForm({ parsed, onParse, onSave }: { parsed: boolean; onParse: () 
   return <div><label className="field"><span>오늘 계획</span><textarea defaultValue="오전 10시 팀 회의, 오후에는 기획안 정리 P1. 퇴근 후 하체 운동 50분." /></label>{parsed && <div className="parse-grid"><div>일정 · 10:00 팀 회의</div><div>할 일 · 기획안 정리 · P1</div><div>운동 · 하체 · 50분</div></div>}<div className="form-actions"><button className="secondary-button" type="button" onClick={onParse}>분석하기</button>{parsed && <button className="primary-button" type="button" onClick={onSave}>등록하기</button>}</div></div>;
 }
 
-function TaskForm({ initial, projects, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function TaskAreaAdder({ onAdd, onSelect }: { onAdd: (name: string) => string; onSelect?: (area: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const inputId = useId();
+  const errorId = useId();
+
+  function add() {
+    try {
+      const area = onAdd(name);
+      onSelect?.(area);
+      setName("");
+      setError("");
+      setOpen(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "구분을 추가하지 못했습니다.");
+    }
+  }
+
+  return <div className="task-area-adder">
+    <button className="text-button" type="button" aria-expanded={open} onClick={() => { setOpen(!open); setError(""); }}>+ 구분 추가</button>
+    {open && <div className="task-area-entry" role="group" aria-label="새 구분 추가">
+      <label className="field" htmlFor={inputId}><span>새 구분 이름</span><input id={inputId} value={name} maxLength={32} placeholder="예: 성당, 공부, 동호회" aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); add(); } }} /></label>
+      <div className="form-actions"><button className="secondary-button" type="button" onClick={add}>구분 추가하기</button><button className="text-button" type="button" onClick={() => { setOpen(false); setError(""); }}>취소</button></div>
+      <small>추가한 구분은 이 브라우저에 저장됩니다.</small>
+      {error && <p id={errorId} className="form-error" role="alert">{error}</p>}
+    </div>}
+  </div>;
+}
+
+function TaskForm({ initial, projects, areas, onAddArea, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; areas: string[]; onAddArea: (name: string) => string; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const [area, setArea] = useState<TaskArea>(initial?.area ?? "company");
-  return <form onSubmit={onSubmit}><div className="form-grid"><Field name="title" label="할 일 제목" defaultValue={initial?.title !== undefined ? String(initial.title) : "QA 완료 조건 확인"} required /><label className="field"><span>구분</span><select name="area" value={area} onChange={(event) => setArea(event.target.value as TaskArea)}><option value="company">회사</option><option value="personal">개인</option><option value="church">성당</option></select></label>{area === "company" && <label className="field"><span>프로젝트</span><select name="projectId" defaultValue={initial?.projectId}><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}<SelectPriority defaultValue={initial?.priority} /><Field name="scheduledDate" label={initial ? "예정일" : "예정일 / 마감일"} type="date" defaultValue={initial?.scheduledDate ?? defaultDate} required />{initial && <Field name="dueDate" label="마감일" type="date" defaultValue={initial.dueDate} required />}<Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue={initial?.estimatedMinutes !== undefined ? String(initial.estimatedMinutes) : "90"} required /></div><label className="field"><span>상세 내용</span><textarea name="description" defaultValue={initial?.description ?? "로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다."} required /></label><ModalActions submitLabel={initial ? "수정 저장" : "할 일 저장"} /></form>;
+  return <form onSubmit={onSubmit}>
+    <div className="form-grid">
+      <Field name="title" label="할 일 제목" defaultValue={initial?.title ?? "QA 완료 조건 확인"} required />
+      <div><label className="field"><span>구분</span><select name="area" value={area} onChange={(event) => setArea(event.target.value)}>{areas.map((value) => <option key={value} value={value}>{taskAreaLabel(value)}</option>)}</select></label><TaskAreaAdder onAdd={onAddArea} onSelect={setArea} /></div>
+      {area === "company" && <label className="field"><span>프로젝트</span><select name="projectId" defaultValue={initial?.projectId}><option value="">프로젝트 없음</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
+      <SelectPriority defaultValue={initial?.priority} />
+      <Field name="scheduledDate" label={initial ? "예정일" : "예정일 / 마감일"} type="date" defaultValue={initial?.scheduledDate ?? defaultDate} required />
+      {initial && <Field name="dueDate" label="마감일" type="date" defaultValue={initial.dueDate} required />}
+      <Field name="estimatedMinutes" label="예상 소요시간(분)" type="number" defaultValue={initial ? String(initial.estimatedMinutes) : "90"} required />
+    </div>
+    <label className="field"><span>상세 내용</span><textarea name="description" defaultValue={initial?.description ?? "로그인, 알림 권한, 오프라인 상태의 완료 조건을 확인하고 발견된 이슈를 정리한다."} required /></label>
+    <ModalActions submitLabel={initial ? "수정 저장" : "할 일 저장"} />
+  </form>;
 }
 
 function ProjectForm({ initial, defaultDate, onSubmit }: { initial?: Project; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
