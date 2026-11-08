@@ -10,7 +10,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다. Supabase를 연결하기 전 목업 화면을 확인하려면 `.env.local`에서 `NEXT_PUBLIC_ALLOW_DEMO_LOGIN=true`로 설정하세요. 운영 환경에서는 이 값을 반드시 `false`로 유지해야 합니다. 현재 데이터 화면은 로컬 상태로 동작하며, Supabase 영구 저장 연결은 다음 구현 단계입니다.
+브라우저에서 `http://localhost:3000`을 엽니다. Supabase를 연결하기 전 목업 화면을 확인하려면 `.env.local`에서 `NEXT_PUBLIC_ALLOW_DEMO_LOGIN=true`로 설정하세요. 운영 환경에서는 이 값을 반드시 `false`로 유지해야 합니다. 실제 로그인 계정은 Supabase에서 일정·할 일·프로젝트·운동·거래와 구분·알림 설정을 읽고 저장합니다. 샘플 데이터를 실제 계정에 자동 삽입하지 않습니다. 서버 저장 확인 전에는 성공을 표시하지 않습니다.
+
+실사용 구성과 남은 기기 검증은 [일상 사용 가이드](docs/daily-use.md)를 참고하세요.
 
 계정 생성부터 테스트 배포까지는 [배포 가이드](docs/deployment.md)를 순서대로 따라가세요.
 

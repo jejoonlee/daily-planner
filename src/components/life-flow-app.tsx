@@ -6,8 +6,10 @@ import { ThemeControls } from "./theme-controls";
 import { initialProjects, initialTasks, initialTransactions, initialWorkouts } from "@/lib/sample-data";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase-client";
 import { taskAreaLabel, useTaskAreas } from "@/lib/task-areas";
-import type { ModalName, PageName, Priority, Project, Task, TaskArea, TaskStatus, Transaction, Workout } from "@/lib/types";
-import { firstValidationError, formDataValues, loginSchema, projectSchema, taskSchema, transactionSchema, workoutSchema } from "@/lib/validation";
+import { createPlannerRepository, defaultNotifications, storageError, type PlannerRepository } from "@/lib/planner-repository";
+import { PushSettings } from "./push-settings";
+import type { ModalName, PageName, Priority, Project, Schedule, Task, TaskArea, TaskStatus, Transaction, Workout } from "@/lib/types";
+import { firstValidationError, formDataValues, loginSchema, projectSchema, scheduleSchema, taskSchema, transactionSchema, workoutSchema } from "@/lib/validation";
 
 const navigation: Array<{ page: PageName; icon: string; label: string }> = [
   { page: "dashboard", icon: "⌂", label: "홈" },
@@ -46,7 +48,7 @@ const projectStatusLabel: Record<ProjectStatus, string> = {
 
 const APP_TIME_ZONE = "Asia/Seoul";
 type ProjectStatus = Project["status"];
-type DetailItem = { kind: "project" | "task" | "workout" | "transaction"; id: string } | null;
+type DetailItem = { kind: "project" | "task" | "workout" | "transaction" | "schedule"; id: string } | null;
 
 function authErrorMessage(code?: string, status?: number) {
   if (code === "email_not_confirmed") return "이메일 인증이 필요합니다. 가입 확인 메일의 인증 링크를 눌러 주세요.";
@@ -59,8 +61,8 @@ function authErrorMessage(code?: string, status?: number) {
   return "요청을 처리하지 못했습니다. 이메일과 비밀번호를 확인하고 다시 시도해 주세요.";
 }
 
-function uid(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function uid() {
+  return crypto.randomUUID();
 }
 
 function won(value: number) {
@@ -149,8 +151,9 @@ export function LifeFlowApp() {
   const [detailItem, setDetailItem] = useState<DetailItem>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const [projects, setProjects] = useState(initialProjects);
+  const [projects, setProjects] = useState<Project[]>(() => supabase ? [] : initialProjects);
   const [tasks, setTasks] = useState(() => {
+    if (supabase) return [] as Task[];
     const scheduledOffsets = [-2, -2, -1, 0];
     const dueOffsets = [-2, -1, 0, 0];
     return initialTasks.map((task, index) => ({
@@ -159,8 +162,9 @@ export function LifeFlowApp() {
       dueDate: shiftDate(todayDate, dueOffsets[index] ?? 0)
     }));
   });
-  const [workouts, setWorkouts] = useState(() => initialWorkouts.map((workout, index) => ({ ...workout, startedAt: `${shiftDate(todayDate, -2 - index)}T19:00` })));
+  const [workouts, setWorkouts] = useState(() => supabase ? [] as Workout[] : initialWorkouts.map((workout, index) => ({ ...workout, startedAt: `${shiftDate(todayDate, -2 - index)}T19:00` })));
   const [transactions, setTransactions] = useState(() => {
+    if (supabase) return [] as Transaction[];
     const previousMonth = shiftMonth(currentMonth, -1);
     const dates = [
       dateTimeInMonth(currentMonth, 25, "09:00"),
@@ -172,8 +176,18 @@ export function LifeFlowApp() {
     ];
     return initialTransactions.map((transaction, index) => ({ ...transaction, happenedAt: dates[index] ?? transaction.happenedAt }));
   });
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [serverAreas, setServerAreas] = useState<string[]>([]);
+  const [notificationPreferences, setNotificationPreferences] = useState(defaultNotifications);
+  const [loadedOwner, setLoadedOwner] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const mutationLock = useRef(false);
+  const currentOwner = useRef(accountId);
+  const repository = useMemo(() => supabase && accountId ? createPlannerRepository(supabase, accountId) : null, [supabase, accountId]);
   const [taskView, setTaskView] = useState<"week" | "month" | "kanban">("week");
-  const { areas: taskAreas, addArea: addTaskArea } = useTaskAreas(accountId ?? "demo", tasks.map((task) => task.area));
+  const { areas: taskAreas, addArea: addLocalTaskArea } = useTaskAreas(accountId ?? "demo", [...serverAreas, ...tasks.map((task) => task.area)]);
   const [selectedTaskArea, setSelectedTaskArea] = useState<"all" | TaskArea>("all");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(todayDate));
@@ -184,19 +198,60 @@ export function LifeFlowApp() {
   const [dateFrom, setDateFrom] = useState(`${currentMonth}-01`);
   const [dateTo, setDateTo] = useState(() => monthEnd(currentMonth));
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [notificationTime, setNotificationTime] = useState("08:00");
-  const [notificationEnabled, setNotificationEnabled] = useState(true);
-  const [intakeParsed, setIntakeParsed] = useState(false);
   const previousMonth = useRef(currentMonth);
 
   const closeModal = useCallback(() => {
     setModal(null);
     setEditingId(null);
     setFormError("");
-    setIntakeParsed(false);
   }, []);
 
   const closeDetail = useCallback(() => setDetailItem(null), []);
+
+  useEffect(() => { currentOwner.current = accountId; }, [accountId]);
+
+  useEffect(() => {
+    if (!repository || !accountId) return;
+    let active = true;
+    void repository.load().then((data) => {
+      if (!active) return;
+      setProjects(data.projects); setTasks(data.tasks); setWorkouts(data.workouts);
+      setTransactions(data.transactions); setSchedules(data.schedules); setServerAreas(data.areas);
+      setNotificationPreferences(data.notifications); setLoadedOwner(accountId); setLoadError("");
+    }).catch(() => {
+      if (active) setLoadError("기록을 불러오지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+    });
+    return () => { active = false; };
+  }, [repository, accountId, reloadKey]);
+
+  function persist<T>(operation: (repo: PlannerRepository) => Promise<T>, success: (value?: T) => void) {
+    if (!supabase) { success(); return; }
+    if (!repository || loadedOwner !== accountId || mutationLock.current) return;
+    const owner = accountId;
+    mutationLock.current = true;
+    setSaving(true); setFormError("");
+    void operation(repository).then((value) => {
+      if (currentOwner.current === owner) success(value);
+    }).catch((error: unknown) => {
+      if (currentOwner.current !== owner) return;
+      const message = storageError(error);
+      setFormError(message); setToast(message);
+    }).finally(() => { mutationLock.current = false; setSaving(false); });
+  }
+
+  function addTaskArea(name: string): string | Promise<string> {
+    if (!repository) return addLocalTaskArea(name);
+    const normalized = name.normalize("NFKC").trim();
+    if (!normalized || normalized.length > 32) throw new Error("새 구분은 1~32자로 입력해 주세요.");
+    if (["전체", "all", "church", ...taskAreas, ...taskAreas.map(taskAreaLabel)].some((v) => v.toLocaleLowerCase() === normalized.toLocaleLowerCase())) throw new Error("이미 있는 구분입니다. 다른 이름을 입력해 주세요.");
+    const next = [...new Set([...serverAreas, normalized])];
+    const owner = accountId;
+    return repository.saveAreas(next).then(() => {
+      if (currentOwner.current !== owner) throw new Error("계정이 변경되었습니다. 다시 시도해 주세요.");
+      setServerAreas(next);
+      return normalized;
+    }).catch(() => { throw new Error("구분을 서버에 저장하지 못했습니다. 다시 시도해 주세요."); });
+  }
 
   useEffect(() => {
     const updateDate = () => setTodayDate((current) => {
@@ -220,8 +275,11 @@ export function LifeFlowApp() {
     if (!supabase) return;
 
     let active = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
+    let authRevision = 0;
+    function restoreSession() {
+      const revision = authRevision;
+      void supabase!.auth.getSession().then(({ data, error }) => {
+      if (!active || revision !== authRevision) return;
       if (error) setAuthError("로그인 상태를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (window.location.hash === "#reset-password") {
         if (data.session) setRecoveryMode("reset");
@@ -231,26 +289,37 @@ export function LifeFlowApp() {
       setAccountId(data.session?.user.id ?? null);
       setAuthReady(true);
     }).catch(() => {
-      if (active) {
+      if (active && revision === authRevision) {
         setAuthError("로그인 상태를 확인하지 못했습니다. 다시 시도해 주세요.");
         setAuthReady(true);
       }
     });
+    }
+    restoreSession();
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (active) {
+        authRevision++;
         if (event === "PASSWORD_RECOVERY" && session) {
           setRecoveryMode("reset");
           window.history.replaceState(null, "", `${window.location.pathname}#reset-password`);
         }
-        if (event === "SIGNED_OUT") setRecoveryMode(null);
+        if (event === "SIGNED_OUT") {
+          setRecoveryMode(null); setLoadedOwner(null); setModal(null); setDetailItem(null); setEditingId(null);
+        }
         setAuthenticated(Boolean(session));
         setAccountId(session?.user.id ?? null);
         setAuthReady(true);
       }
     });
+    const onVisible = () => { if (document.visibilityState === "visible") restoreSession(); };
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) restoreSession(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
 
     return () => {
       active = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
       listener.subscription.unsubscribe();
     };
   }, [supabase]);
@@ -271,6 +340,8 @@ export function LifeFlowApp() {
   const detailTask = detailItem?.kind === "task" ? tasks.find((task) => task.id === detailItem.id) : undefined;
   const detailWorkout = detailItem?.kind === "workout" ? workouts.find((workout) => workout.id === detailItem.id) : undefined;
   const detailTransaction = detailItem?.kind === "transaction" ? transactions.find((transaction) => transaction.id === detailItem.id) : undefined;
+  const detailSchedule = detailItem?.kind === "schedule" ? schedules.find((schedule) => schedule.id === detailItem.id) : undefined;
+  const todaySchedules = schedules.filter((schedule) => schedule.startedAt.slice(0, 10) === todayDate);
   const todayTasks = tasks.filter((task) => task.scheduledDate === todayDate && task.status !== "done");
   const visibleTasks = selectedTaskArea === "all" ? tasks : tasks.filter((task) => task.area === selectedTaskArea);
 
@@ -355,25 +426,40 @@ export function LifeFlowApp() {
   function moveTaskToDate(date: string, draggedTaskId?: string) {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
-    setTasks((current) => current.map((task) => task.id === taskId ? { ...task, scheduledDate: date } : task));
     endTaskMove();
-    setToast(`${displayDate(date)}로 할 일을 옮겼습니다.`);
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    const next = { ...task, scheduledDate: date };
+    persist((repo) => repo.saveTask(next, false), (saved) => {
+      setTasks((current) => current.map((item) => item.id === taskId ? saved ?? next : item));
+      setToast(`${displayDate(date)}로 할 일을 옮겼습니다.`);
+    });
   }
 
   function moveTaskToStatus(status: TaskStatus, draggedTaskId?: string) {
     const taskId = draggedTaskId || movingTaskId;
     if (!taskId) return;
-    setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status } : task));
     endTaskMove();
-    setToast(`‘${statusLabel[status]}’ 영역으로 옮겼습니다.`);
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    const next = { ...task, status };
+    persist((repo) => repo.saveTask(next, false), (saved) => {
+      setTasks((current) => current.map((item) => item.id === taskId ? saved ?? next : item));
+      setToast(`‘${statusLabel[status]}’ 영역으로 옮겼습니다.`);
+    });
   }
 
   function moveProjectToStatus(status: ProjectStatus, draggedProjectId?: string) {
     const projectId = draggedProjectId || movingProjectId;
     if (!projectId) return;
-    setProjects((current) => current.map((project) => project.id === projectId ? { ...project, status } : project));
     endProjectMove();
-    setToast(`프로젝트를 ‘${projectStatusLabel[status]}’ 영역으로 옮겼습니다.`);
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+    const next = { ...project, status };
+    persist((repo) => repo.saveProject(next, false), (saved) => {
+      setProjects((current) => current.map((item) => item.id === projectId ? saved ?? next : item));
+      setToast(`프로젝트를 ‘${projectStatusLabel[status]}’ 영역으로 옮겼습니다.`);
+    });
   }
 
   function dropTaskAtPoint(clientX: number, clientY: number, taskId: string) {
@@ -465,12 +551,26 @@ export function LifeFlowApp() {
 
   async function signOut() {
     try {
-      if (supabase) await supabase.auth.signOut();
-    } finally {
+      if (supabase) {
+        // Stop this installation's pushes before removing its session.
+        if (accountId && "serviceWorker" in navigator) {
+          const registration = await navigator.serviceWorker.getRegistration();
+          const subscription = await registration?.pushManager.getSubscription();
+          if (subscription) {
+            const { error } = await supabase.from("push_subscriptions").update({ active: false }).eq("user_id", accountId).eq("endpoint", subscription.endpoint);
+            if (error) throw error;
+            await subscription.unsubscribe();
+          }
+        }
+        const { error } = await supabase.auth.signOut({ scope: "local" });
+        if (error) throw error;
+      }
       setAuthenticated(false);
       setAccountId(null);
+      setLoadedOwner(null);
+      setProjects([]); setTasks([]); setWorkouts([]); setTransactions([]); setSchedules([]); setServerAreas([]);
       setPage("dashboard");
-    }
+    } catch { setToast("로그아웃하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요."); }
   }
 
   function openTaskDetail(id: string) {
@@ -506,33 +606,43 @@ export function LifeFlowApp() {
   }
 
   function deleteTask(id: string) {
-    setTasks((current) => current.filter((task) => task.id !== id));
-    endTaskMove();
-    closeDetail();
-    setToast("할 일을 삭제했습니다.");
+    const item = tasks.find((task) => task.id === id);
+    if (!item) return;
+    persist((repo) => repo.remove("task", item), () => {
+      setTasks((current) => current.filter((task) => task.id !== id));
+      endTaskMove(); closeDetail(); setToast("할 일을 삭제했습니다.");
+    });
   }
 
   function deleteProject(id: string) {
-    setProjects((current) => current.filter((project) => project.id !== id));
-    setTasks((current) => current.map((task) => task.projectId === id ? { ...task, projectId: undefined } : task));
-    endProjectMove();
-    endTaskMove();
-    closeDetail();
-    setToast("프로젝트를 삭제했습니다.");
+    const item = projects.find((project) => project.id === id);
+    if (!item) return;
+    persist(async (repo) => { await repo.remove("project", item); return repo.load(); }, (saved) => {
+      setProjects((current) => current.filter((project) => project.id !== id));
+      setTasks((current) => saved?.tasks ?? current.map((task) => task.projectId === id ? { ...task, projectId: undefined } : task));
+      endProjectMove(); endTaskMove(); closeDetail(); setToast("프로젝트를 삭제했습니다. 연결된 할 일은 유지됩니다.");
+    });
   }
 
   function deleteWorkout(id: string) {
-    setWorkouts((current) => current.filter((workout) => workout.id !== id));
-    closeDetail();
-    setToast("운동 기록을 삭제했습니다.");
+    const item = workouts.find((workout) => workout.id === id);
+    if (!item) return;
+    persist((repo) => repo.remove("workout", item), () => {
+      setWorkouts((current) => current.filter((workout) => workout.id !== id));
+      closeDetail(); setToast("운동 기록을 삭제했습니다.");
+    });
   }
 
   function deleteTransaction(id: string) {
+    const item = transactions.find((transaction) => transaction.id === id);
+    if (!item) return;
+    persist((repo) => repo.remove("transaction", item), () => {
     const remaining = transactions.filter((transaction) => transaction.id !== id);
     setTransactions((current) => current.filter((transaction) => transaction.id !== id));
     setSelectedCategories((current) => current.filter((category) => remaining.some((transaction) => transaction.category === category)));
     closeDetail();
     setToast("가계부 거래를 삭제했습니다.");
+    });
   }
 
   function submitTask(event: FormEvent<HTMLFormElement>) {
@@ -549,7 +659,7 @@ export function LifeFlowApp() {
     }
     const task: Task = {
       ...tasks.find((item) => item.id === editingId),
-      id: editingId ?? uid("task"),
+      id: editingId ?? uid(),
       title: data.title,
       description: data.description,
       area: data.area,
@@ -560,9 +670,10 @@ export function LifeFlowApp() {
       dueDate: data.dueDate ?? data.scheduledDate,
       estimatedMinutes: data.estimatedMinutes
     };
-    setTasks((current) => editingId ? current.map((item) => item.id === editingId ? task : item) : [task, ...current]);
-    closeModal();
-    setToast(editingId ? "할 일을 수정했습니다." : "새 할 일을 저장했습니다.");
+    persist((repo) => repo.saveTask(task, !editingId), (saved) => {
+      setTasks((current) => editingId ? current.map((item) => item.id === editingId ? saved ?? task : item) : [saved ?? task, ...current]);
+      closeModal(); setToast(editingId ? "할 일을 수정했습니다." : "새 할 일을 저장했습니다.");
+    });
   }
 
   function submitProject(event: FormEvent<HTMLFormElement>) {
@@ -575,7 +686,7 @@ export function LifeFlowApp() {
     const data = parsed.data;
     const project: Project = {
       ...projects.find((item) => item.id === editingId),
-      id: editingId ?? uid("project"),
+      id: editingId ?? uid(),
       name: data.name,
       description: data.description,
       priority: data.priority,
@@ -583,9 +694,10 @@ export function LifeFlowApp() {
       progress: projects.find((item) => item.id === editingId)?.progress ?? 0,
       dueDate: data.dueDate
     };
-    setProjects((current) => editingId ? current.map((item) => item.id === editingId ? project : item) : [project, ...current]);
-    closeModal();
-    setToast(editingId ? "프로젝트를 수정했습니다." : "새 프로젝트를 저장했습니다.");
+    persist((repo) => repo.saveProject(project, !editingId), (saved) => {
+      setProjects((current) => editingId ? current.map((item) => item.id === editingId ? saved ?? project : item) : [saved ?? project, ...current]);
+      closeModal(); setToast(editingId ? "프로젝트를 수정했습니다." : "새 프로젝트를 저장했습니다.");
+    });
   }
 
   function submitWorkout(event: FormEvent<HTMLFormElement>) {
@@ -597,7 +709,8 @@ export function LifeFlowApp() {
     }
     const data = parsed.data;
     const workout: Workout = {
-      id: editingId ?? uid("workout"),
+      updatedAt: workouts.find((item) => item.id === editingId)?.updatedAt,
+      id: editingId ?? uid(),
       title: data.title,
       startedAt: data.startedAt,
       place: data.place,
@@ -607,9 +720,10 @@ export function LifeFlowApp() {
       reps: data.reps,
       weightKg: data.weightKg
     };
-    setWorkouts((current) => editingId ? current.map((item) => item.id === editingId ? workout : item) : [workout, ...current]);
-    closeModal();
-    setToast(editingId ? "운동 기록을 수정했습니다." : "운동 기록을 저장했습니다.");
+    persist((repo) => repo.saveWorkout(workout, !editingId), (saved) => {
+      setWorkouts((current) => editingId ? current.map((item) => item.id === editingId ? saved ?? workout : item) : [saved ?? workout, ...current]);
+      closeModal(); setToast(editingId ? "운동 기록을 수정했습니다." : "운동 기록을 저장했습니다.");
+    });
   }
 
   function submitTransaction(event: FormEvent<HTMLFormElement>) {
@@ -622,7 +736,8 @@ export function LifeFlowApp() {
     }
     const data = parsed.data;
     const transaction: Transaction = {
-      id: editingId ?? uid("transaction"),
+      updatedAt: transactions.find((item) => item.id === editingId)?.updatedAt,
+      id: editingId ?? uid(),
       happenedAt: data.happenedAt,
       name: data.name,
       merchant: data.merchant,
@@ -631,39 +746,21 @@ export function LifeFlowApp() {
       category: data.category,
       account: data.account
     };
-    setTransactions((current) => editingId ? current.map((item) => item.id === editingId ? transaction : item) : [transaction, ...current]);
-    closeModal();
-    setToast(editingId ? "가계부 거래를 수정했습니다." : "가계부 거래를 등록했습니다.");
+    persist((repo) => repo.saveTransaction(transaction, !editingId), (saved) => {
+      setTransactions((current) => editingId ? current.map((item) => item.id === editingId ? saved ?? transaction : item) : [saved ?? transaction, ...current]);
+      closeModal(); setToast(editingId ? "가계부 거래를 수정했습니다." : "가계부 거래를 등록했습니다.");
+    });
   }
 
-  async function testNotification() {
-    if (!("Notification" in window)) {
-      setToast("이 브라우저는 알림을 지원하지 않습니다.");
-      return;
-    }
-    if (!("serviceWorker" in navigator)) {
-      setToast("이 브라우저는 서비스 워커를 지원하지 않습니다.");
-      return;
-    }
-
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setToast("알림 권한이 허용되지 않았습니다.");
-        return;
-      }
-      const registration = await Promise.race([
-        navigator.serviceWorker.ready,
-        new Promise<never>((_resolve, reject) => window.setTimeout(() => reject(new Error("service-worker-timeout")), 5000))
-      ]);
-      await registration.showNotification("Life Flow", {
-        body: `${notificationTime}에 오늘 계획 입력 알림을 보냅니다.`,
-        icon: "/icon.svg"
-      });
-      setToast("테스트 알림을 표시했습니다.");
-    } catch {
-      setToast("알림을 준비하지 못했습니다. 앱을 새로고침한 뒤 다시 시도해 주세요.");
-    }
+  function submitSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = scheduleSchema.safeParse(formDataValues(new FormData(event.currentTarget)));
+    if (!parsed.success) { setFormError(firstValidationError(parsed.error)); return; }
+    const value: Schedule = { ...parsed.data, id: editingId ?? uid(), updatedAt: schedules.find((item) => item.id === editingId)?.updatedAt };
+    persist((repo) => repo.saveSchedule(value, !editingId), (saved) => {
+      setSchedules((current) => editingId ? current.map((item) => item.id === editingId ? saved ?? value : item) : [...current, saved ?? value]);
+      closeModal(); setToast(editingId ? "일정을 수정했습니다." : "일정을 저장했습니다.");
+    });
   }
 
   if (!authReady) {
@@ -702,8 +799,13 @@ export function LifeFlowApp() {
     );
   }
 
+  if (supabase && loadedOwner !== accountId) {
+    return <main className="login-page"><div className="login-card"><p role={loadError ? "alert" : "status"}>{loadError || "내 기록을 불러오고 있습니다."}</p>{loadError && <button className="primary-button" onClick={() => { setLoadError(""); setReloadKey((key) => key + 1); }}>다시 불러오기</button>}<button className="text-button" onClick={signOut}>로그아웃</button></div></main>;
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" aria-busy={saving} onKeyDownCapture={(event) => { if (saving) { event.preventDefault(); event.stopPropagation(); } }}>
+      {saving && <div className="saving-overlay" role="status">서버에 저장하고 있습니다…</div>}
       <nav className="app-navigation" aria-label="주 메뉴">
         <div className="brand navigation-brand"><span className="brand-mark">L</span><span>Life Flow</span></div>
         <div className="navigation-items">
@@ -738,27 +840,27 @@ export function LifeFlowApp() {
                 actions={<><button className="secondary-button" onClick={() => setModal("money")}>가계부 입력</button><button className="primary-button" onClick={() => setModal("intake")}>오늘 계획 입력</button></>}
               />
               <div className="dashboard-grid">
-                <Panel title="오늘 일정" meta="2개">
-                  <ListRow title="주간 팀 미팅" detail="회사 · 온라인" value="09:30" />
-                  <ListRow title="점심 약속" detail="개인 · 강남" value="12:30" />
+                <Panel title="오늘 일정" action={<button className="text-button" onClick={() => setModal("schedule")}>+ 일정</button>}>
+                  {todaySchedules.length === 0 && <p className="empty-records">오늘 등록된 일정이 없습니다.</p>}
+                  {todaySchedules.map((schedule) => <button type="button" className="task-button" key={schedule.id} onClick={() => setDetailItem({ kind: "schedule", id: schedule.id })}><strong>{schedule.startedAt.slice(11)} {schedule.title}</strong><small>{taskAreaLabel(schedule.area)} · {schedule.location}</small></button>)}
                 </Panel>
                 <Panel title="오늘 할 일" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
                   {todayTasks.length === 0 && <p className="empty-records">오늘 예정된 할 일이 없습니다.</p>}
                   {todayTasks.map((task) => <TaskButton key={task.id} task={task} onClick={() => openTaskDetail(task.id)} />)}
                 </Panel>
                 <Panel title="오늘 운동" action={<button className="text-button" onClick={() => navigate("workouts")}>상세</button>}>
-                  {workouts.slice(0, 1).map((workout) => <ListRow key={workout.id} title={workout.title} detail={`${workout.place} · ${workout.durationMinutes}분`} value="19:00" />)}
+                  {workouts.filter((workout) => workout.startedAt.slice(0, 10) === todayDate).map((workout) => <button key={workout.id} className="task-button" onClick={() => setDetailItem({ kind: "workout", id: workout.id })}>{workout.startedAt.slice(11)} · {workout.title} · {workout.durationMinutes}분</button>)}
                 </Panel>
-                <Panel title="관심 시장" meta="지연 시세">
+                {!supabase && <Panel title="관심 시장" meta="샘플 시세">
                   <MarketRow name="KOSPI" value="2,742.18" />
                   <MarketRow name="S&P 500" value="5,631.22" />
                   <MarketRow name="NASDAQ" value="17,713.62" />
-                </Panel>
+                </Panel>}
               </div>
               <Panel title="진행 중 프로젝트" className="wide-panel" action={<button className="text-button" onClick={() => navigate("tasks")}>전체 보기</button>}>
                 <div className="project-summary-grid">
                   {projects.filter((project) => project.status === "doing").map((project) => (
-                    <button key={project.id} className="project-summary" onClick={() => navigate("tasks")}>
+                    <button key={project.id} className="project-summary" onClick={() => setDetailItem({ kind: "project", id: project.id })}>
                       <strong>{project.name}</strong><span>{priorityLabel[project.priority]} · {displayDate(project.dueDate)}</span><span className="progress"><i style={{ width: `${project.progress}%` }} /></span>
                     </button>
                   ))}
@@ -788,6 +890,10 @@ export function LifeFlowApp() {
                 {["all", ...taskAreas].map((area) => <button key={area} type="button" className={selectedTaskArea === area ? "active" : ""} onClick={() => { endTaskMove(); setSelectedTaskArea(area); }}>{area === "all" ? "전체" : taskAreaLabel(area)}</button>)}
               </div>
               <TaskAreaAdder onAdd={addTaskArea} />
+              <Panel title="전체 일정" action={<button className="text-button" onClick={() => setModal("schedule")}>+ 일정</button>}>
+                {schedules.length === 0 && <p className="empty-records">등록된 일정이 없습니다.</p>}
+                {[...schedules].sort((a, b) => a.startedAt.localeCompare(b.startedAt)).map((schedule) => <button type="button" className="task-button" key={schedule.id} onClick={() => setDetailItem({ kind: "schedule", id: schedule.id })}>{schedule.startedAt.replace("T", " ")} · {schedule.title}</button>)}
+              </Panel>
               {movingTaskId && <div className="move-hint" role="status"><span>옮길 날짜 또는 영역 위에서 카드를 놓으세요.</span><button type="button" onClick={endTaskMove}>취소</button></div>}
               <div className="view-toolbar">
                 <div className="segmented">
@@ -850,6 +956,7 @@ export function LifeFlowApp() {
                 />
               </div>
               <div className="money-filters" aria-label="거래 필터">
+                <div className="segmented" role="group" aria-label="가계부 조회 범위"><button type="button" aria-pressed={dateFrom === `${currentMonth}-01` && dateTo === monthEnd(currentMonth)} onClick={() => { setDateFrom(`${currentMonth}-01`); setDateTo(monthEnd(currentMonth)); setSelectedCategories([]); }}>이번 달</button><button type="button" aria-pressed={!dateFrom && !dateTo && selectedCategories.length === 0} onClick={() => { setDateFrom(""); setDateTo(""); setSelectedCategories([]); }}>전체 보기</button></div>
                 <div className="period-filter"><label><span>시작일</span><input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label><span aria-hidden="true">–</span><label><span>종료일</span><input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label></div>
                 <details className="category-filter">
                   <summary>카테고리 {selectedCategories.length ? `${selectedCategories.length}개` : "전체"}</summary>
@@ -870,14 +977,8 @@ export function LifeFlowApp() {
             <section>
               <PageHeading title="설정" />
               <section className="panel settings-panel appearance-panel" aria-label="화면 설정"><div className="panel-heading"><strong>화면 모드</strong></div><ThemeControls /></section>
-              <form className="panel settings-panel" onSubmit={(event) => { event.preventDefault(); setToast("설정을 저장했습니다."); }}>
-                <div className="panel-heading"><strong>알림 설정</strong><span>Asia/Seoul</span></div>
-                <label className="setting-row"><span><strong>아침 계획 알림</strong><small>일정·할 일·운동 입력을 요청합니다.</small></span><input type="checkbox" checked={notificationEnabled} onChange={(event) => setNotificationEnabled(event.target.checked)} /></label>
-                <label className="setting-row"><span><strong>알림 시간</strong><small>선택한 시간에 PWA 푸시를 보냅니다.</small></span><input type="time" value={notificationTime} onChange={(event) => setNotificationTime(event.target.value)} /></label>
-                <div className="setting-copy"><strong>알림 요일</strong><small>선택한 요일에만 전송합니다.</small></div>
-                <div className="day-options">{"월화수목금토일".split("").map((day) => <label key={day}><input type="checkbox" defaultChecked />{day}</label>)}</div>
-                <div className="form-actions"><button className="primary-button" type="submit">설정 저장</button><button className="secondary-button" type="button" onClick={testNotification}>테스트 알림</button><button className="text-button" type="button" onClick={signOut}>로그아웃</button></div>
-              </form>
+              <PushSettings client={supabase} ownerId={accountId} initial={notificationPreferences} onSaved={setNotificationPreferences} />
+              <section className="panel settings-panel"><strong>로그인 유지</strong><p>이 설치에서는 로그인 상태를 저장하고 자동으로 갱신합니다. 직접 로그아웃하거나 기기에서 사이트 데이터를 지우면 다시 로그인해야 합니다.</p><button className="text-button" type="button" onClick={signOut}>로그아웃</button></section>
             </section>
           )}
         </div>
@@ -886,6 +987,10 @@ export function LifeFlowApp() {
       {detailProject && <EntryModal title={detailProject.name} onClose={closeDetail}>
         <ProjectDetail project={detailProject} />
         <RecordActions key={detailProject.id} name={detailProject.name} kind="프로젝트" confirmationNote={`연결된 할 일 ${tasks.filter((task) => task.projectId === detailProject.id).length}개는 유지되며 프로젝트 연결이 해제됩니다.`} onEdit={() => editProject(detailProject.id)} onDelete={() => deleteProject(detailProject.id)} onClose={closeDetail} />
+      </EntryModal>}
+      {detailSchedule && <EntryModal title={detailSchedule.title} onClose={closeDetail}>
+        <p>{detailSchedule.startedAt.replace("T", " ")}{detailSchedule.endedAt && ` – ${detailSchedule.endedAt.replace("T", " ")}`} (한국 시간)</p><p>{taskAreaLabel(detailSchedule.area)} · {detailSchedule.location || "장소 미정"}</p><p>{detailSchedule.description}</p>
+        <RecordActions key={detailSchedule.id} name={detailSchedule.title} kind="일정" onEdit={() => { setEditingId(detailSchedule.id); setDetailItem(null); setModal("schedule"); }} onDelete={() => persist((repo) => repo.remove("schedule", detailSchedule), () => { setSchedules((current) => current.filter((item) => item.id !== detailSchedule.id)); closeDetail(); setToast("일정을 삭제했습니다."); })} onClose={closeDetail} />
       </EntryModal>}
       {detailTask && <EntryModal title={detailTask.title} onClose={closeDetail}>
         <TaskDetail task={detailTask} project={detailTask.projectId ? projectById[detailTask.projectId] : undefined} />
@@ -903,8 +1008,8 @@ export function LifeFlowApp() {
       {modal && (
         <EntryModal title={editingId ? editModalTitle(modal) : modalTitle(modal)} onClose={closeModal}>
           {formError && <p className="form-error" role="alert">{formError}</p>}
-          {modal === "intake" && <IntakeForm parsed={intakeParsed} onParse={() => setIntakeParsed(true)} onSave={() => { closeModal(); setToast("오늘 계획을 등록했습니다."); }} />}
-          {modal === "task" && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} areas={taskAreas} onAddArea={addTaskArea} defaultDate={todayDate} onSubmit={submitTask} />}
+          {(modal === "intake" || modal === "task") && <TaskForm initial={tasks.find((item) => item.id === editingId)} projects={projects} areas={taskAreas} onAddArea={addTaskArea} defaultDate={todayDate} onSubmit={submitTask} />}
+          {modal === "schedule" && <ScheduleForm initial={schedules.find((item) => item.id === editingId)} areas={taskAreas} defaultDate={todayDate} onSubmit={submitSchedule} />}
           {modal === "project" && <ProjectForm initial={projects.find((item) => item.id === editingId)} defaultDate={shiftDate(todayDate, 30)} onSubmit={submitProject} />}
           {modal === "workout" && <WorkoutForm initial={workouts.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitWorkout} />}
           {modal === "money" && <TransactionForm initial={transactions.find((item) => item.id === editingId)} defaultDate={todayDate} onSubmit={submitTransaction} />}
@@ -939,9 +1044,6 @@ function Panel({ title, meta, action, className = "", children }: { title: strin
   return <article className={`panel ${className}`}><div className="panel-heading"><strong>{title}</strong>{action ?? <span>{meta}</span>}</div>{children}</article>;
 }
 
-function ListRow({ title, detail, value }: { title: string; detail: string; value: string }) {
-  return <div className="list-row"><div><strong>{title}</strong><small>{detail}</small></div><span>{value}</span></div>;
-}
 
 function MarketRow({ name, value }: { name: string; value: string }) {
   return <div className="market-row"><span>{name}</span><strong>{value}</strong></div>;
@@ -1278,24 +1380,26 @@ function ModalActions({ submitLabel }: { submitLabel: string }) {
   return <div className="form-actions"><button className="primary-button" type="submit">{submitLabel}</button></div>;
 }
 
-function IntakeForm({ parsed, onParse, onSave }: { parsed: boolean; onParse: () => void; onSave: () => void }) {
-  return <div><label className="field"><span>오늘 계획</span><textarea defaultValue="오전 10시 팀 회의, 오후에는 기획안 정리 P1. 퇴근 후 하체 운동 50분." /></label>{parsed && <div className="parse-grid"><div>일정 · 10:00 팀 회의</div><div>할 일 · 기획안 정리 · P1</div><div>운동 · 하체 · 50분</div></div>}<div className="form-actions"><button className="secondary-button" type="button" onClick={onParse}>분석하기</button>{parsed && <button className="primary-button" type="button" onClick={onSave}>등록하기</button>}</div></div>;
-}
-
-function TaskAreaAdder({ onAdd, onSelect }: { onAdd: (name: string) => string; onSelect?: (area: string) => void }) {
+function TaskAreaAdder({ onAdd, onSelect }: { onAdd: (name: string) => string | Promise<string>; onSelect?: (area: string) => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const inputId = useId();
   const errorId = useId();
 
   function add() {
+    if (busy) return;
+    function done(area: string) {
+      onSelect?.(area); setName(""); setError(""); setOpen(false);
+    }
     try {
       const area = onAdd(name);
-      onSelect?.(area);
-      setName("");
-      setError("");
-      setOpen(false);
+      if (typeof area === "string") done(area);
+      else {
+        setBusy(true);
+        void area.then(done).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "구분을 추가하지 못했습니다.")).finally(() => setBusy(false));
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "구분을 추가하지 못했습니다.");
     }
@@ -1305,14 +1409,13 @@ function TaskAreaAdder({ onAdd, onSelect }: { onAdd: (name: string) => string; o
     <button className="text-button" type="button" aria-expanded={open} onClick={() => { setOpen(!open); setError(""); }}>+ 구분 추가</button>
     {open && <div className="task-area-entry" role="group" aria-label="새 구분 추가">
       <label className="field" htmlFor={inputId}><span>새 구분 이름</span><input id={inputId} value={name} maxLength={32} placeholder="예: 성당, 공부, 동호회" aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); add(); } }} /></label>
-      <div className="form-actions"><button className="secondary-button" type="button" onClick={add}>구분 추가하기</button><button className="text-button" type="button" onClick={() => { setOpen(false); setError(""); }}>취소</button></div>
-      <small>추가한 구분은 이 브라우저에 저장됩니다.</small>
+      <div className="form-actions"><button className="secondary-button" type="button" onClick={add} disabled={busy}>{busy ? "저장 중…" : "구분 추가하기"}</button><button className="text-button" type="button" disabled={busy} onClick={() => { setOpen(false); setError(""); }}>취소</button></div>
       {error && <p id={errorId} className="form-error" role="alert">{error}</p>}
     </div>}
   </div>;
 }
 
-function TaskForm({ initial, projects, areas, onAddArea, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; areas: string[]; onAddArea: (name: string) => string; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function TaskForm({ initial, projects, areas, onAddArea, defaultDate, onSubmit }: { initial?: Task; projects: Project[]; areas: string[]; onAddArea: (name: string) => string | Promise<string>; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const [area, setArea] = useState<TaskArea>(initial?.area ?? "company");
   return <form onSubmit={onSubmit}>
     <div className="form-grid">
@@ -1350,9 +1453,19 @@ function SelectPriority({ defaultValue }: { defaultValue?: Priority } = {}) {
 }
 
 function modalTitle(modal: Exclude<ModalName, null>) {
-  return { intake: "오늘 계획 입력", task: "새 할 일", project: "새 프로젝트", workout: "운동 기록", money: "가계부 거래 등록" }[modal];
+  return { intake: "오늘 계획 입력", task: "새 할 일", project: "새 프로젝트", workout: "운동 기록", money: "가계부 거래 등록", schedule: "새 일정" }[modal];
 }
 
 function editModalTitle(modal: Exclude<ModalName, null>) {
-  return { intake: "오늘 계획 수정", task: "할 일 수정", project: "프로젝트 수정", workout: "운동 수정", money: "가계부 거래 수정" }[modal];
+  return { intake: "오늘 계획 수정", task: "할 일 수정", project: "프로젝트 수정", workout: "운동 수정", money: "가계부 거래 수정", schedule: "일정 수정" }[modal];
+}
+
+function ScheduleForm({ initial, areas, defaultDate, onSubmit }: { initial?: Schedule; areas: string[]; defaultDate: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form onSubmit={onSubmit}><div className="form-grid">
+    <Field name="title" label="일정 제목" defaultValue={initial?.title} required />
+    <label className="field"><span>일정 구분</span><select name="area" defaultValue={initial?.area ?? "personal"}>{areas.map((area) => <option key={area} value={area}>{taskAreaLabel(area)}</option>)}</select></label>
+    <Field name="startedAt" label="시작 시간 (한국 시간)" type="datetime-local" defaultValue={initial?.startedAt ?? `${defaultDate}T09:00`} required />
+    <Field name="endedAt" label="종료 시간 (선택)" type="datetime-local" defaultValue={initial?.endedAt} />
+    <Field name="location" label="장소 (선택)" defaultValue={initial?.location} />
+  </div><label className="field"><span>일정 메모</span><textarea name="description" defaultValue={initial?.description} /></label><ModalActions submitLabel={initial ? "수정 저장" : "일정 저장"} /></form>;
 }

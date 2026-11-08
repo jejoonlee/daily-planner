@@ -10,6 +10,10 @@ vi.mock("@/lib/supabase-client", () => ({
   hasSupabaseConfig: true,
   getSupabaseBrowserClient: () => ({ auth })
 }));
+vi.mock("@/lib/planner-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/planner-repository")>();
+  return { ...original, createPlannerRepository: () => ({ load: async () => ({ projects: [], tasks: [], workouts: [], transactions: [], schedules: [], areas: [], notifications: original.defaultNotifications }) }) };
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -110,6 +114,17 @@ it("인증 세션이 반환되면 앱으로 진입한다", async () => {
   auth.signUp.mockResolvedValue({ data: { session: { user: { id: "test-user" } } }, error: null });
   await fillSignup();
   expect(await screen.findByRole("button", { name: "할 일" })).toBeInTheDocument();
+});
+
+it("저장된 로그인 세션은 앱을 닫고 다시 열어도 비밀번호 입력 없이 복원된다", async () => {
+  auth.getSession.mockResolvedValue({ data: { session: { user: { id: "test-user" } } }, error: null });
+  const first = render(createElement(LifeFlowApp));
+  expect(await screen.findByRole("heading", { name: "좋은 아침이에요" })).toBeInTheDocument();
+  first.unmount();
+  render(createElement(LifeFlowApp));
+  expect(await screen.findByRole("heading", { name: "좋은 아침이에요" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("비밀번호")).not.toBeInTheDocument();
+  expect(auth.signInWithPassword).not.toHaveBeenCalled();
 });
 
 it("메일 전송 제한 시 성공 안내 대신 재시도 안내를 표시한다", async () => {

@@ -17,6 +17,22 @@ const dateTimeLocalValue = z.string().refine((value) => {
 }, "날짜와 시간을 확인해 주세요.");
 const priorityValue = z.enum(["P1", "P2", "P3", "P4"]);
 
+export const scheduleSchema = z.object({
+  title: z.string().trim().min(1, "일정 제목을 입력해 주세요.").max(200),
+  description: z.string().trim().max(5000),
+  area: z.string().trim().min(1).max(32),
+  startedAt: dateTimeLocalValue,
+  endedAt: z.union([dateTimeLocalValue, z.literal("")]),
+  location: z.string().trim().max(200)
+}).refine((v) => !v.endedAt || v.endedAt >= v.startedAt, "종료 시간은 시작 시간 이후여야 합니다.");
+
+export const notificationSchema = z.object({
+  enabled: z.boolean(),
+  times: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "알림 시간을 확인해 주세요.")).min(1).max(3),
+  days: z.array(z.number().int().min(0).max(6)).max(7)
+}).refine((v) => !v.enabled || v.days.length > 0, "알림 요일을 하나 이상 선택해 주세요.")
+  .refine((v) => new Set(v.times).size === v.times.length, "알림 시간은 중복될 수 없습니다.");
+
 export const loginSchema = z.object({
   email: z.string().trim().email("올바른 이메일을 입력해 주세요."),
   password: z.string().min(8, "비밀번호는 8자 이상이어야 합니다.")

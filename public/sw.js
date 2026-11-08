@@ -8,6 +8,7 @@ self.addEventListener("push", (event) => {
   const data = {
     title: "Life Flow",
     body: "오늘 계획을 입력해 주세요.",
+    tag: "life-flow-reminder",
     url: "/?entry=intake"
   };
 
@@ -20,6 +21,7 @@ self.addEventListener("push", (event) => {
         if (typeof parsed.title === "string" && parsed.title) data.title = parsed.title;
         if (typeof parsed.body === "string" && parsed.body) data.body = parsed.body;
         if (typeof parsed.url === "string" && parsed.url) data.url = parsed.url;
+        if (typeof parsed.tag === "string" && parsed.tag) data.tag = parsed.tag;
       }
     } catch {
       if (payload) data.body = payload;
@@ -29,6 +31,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
+      tag: data.tag,
       icon: "/icon.svg",
       badge: "/icon.svg",
       data: { url: data.url }

@@ -498,19 +498,49 @@ describe("LifeFlowApp", () => {
     expect(screen.getByRole("dialog", { name: "가계부 거래 등록" })).toBeInTheDocument();
   });
 
-  it("모달은 ESC로 닫히고 오늘 계획 분석 상태를 초기화한다", () => {
+  it("오늘 계획은 실제 할 일 입력을 열고 ESC로 닫은 뒤 새 입력으로 시작한다", () => {
     render(createElement(LifeFlowApp));
     login();
     fireEvent.click(screen.getByRole("button", { name: "오늘 계획 입력" }));
 
-    expect(screen.getByLabelText("오늘 계획")).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "분석하기" }));
-    expect(screen.getByText("일정 · 10:00 팀 회의")).toBeInTheDocument();
+    expect(screen.getByLabelText("할 일 제목")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("할 일 제목"), { target: { value: "저장하지 않은 계획" } });
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "오늘 계획 입력" }));
-    expect(screen.queryByText("일정 · 10:00 팀 회의")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("할 일 제목")).not.toHaveValue("저장하지 않은 계획");
+  });
+
+  it("가계부 전체 보기는 날짜와 카테고리 필터를 해제하고 이전 달 거래를 표시한다", () => {
+    render(createElement(LifeFlowApp)); login();
+    fireEvent.click(screen.getByRole("button", { name: "가계부" }));
+    expect(screen.queryByRole("button", { name: /월세/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("카테고리 전체"));
+    fireEvent.click(screen.getByLabelText("소비 › 카페·간식"));
+    fireEvent.click(screen.getByRole("button", { name: "전체 보기" }));
+    expect(screen.getByLabelText("시작일")).toHaveValue("");
+    expect(screen.getByLabelText("종료일")).toHaveValue("");
+    expect(screen.getByText("6건")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /월세/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "이번 달" }));
+    expect(screen.getByText("3건")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /월세/ })).not.toBeInTheDocument();
+  });
+
+  it("실제 일정 등록 수정 삭제는 홈과 전체 일정에 반영된다", () => {
+    render(createElement(LifeFlowApp)); login();
+    fireEvent.click(screen.getByRole("button", { name: "+ 일정" }));
+    fireEvent.change(screen.getByLabelText("일정 제목"), { target: { value: "치과 예약" } });
+    fireEvent.click(screen.getByRole("button", { name: "일정 저장" }));
+    fireEvent.click(screen.getByRole("button", { name: /치과 예약/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "수정" }));
+    fireEvent.change(screen.getByLabelText("일정 제목"), { target: { value: "치과 시간 확인" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    fireEvent.click(screen.getByRole("button", { name: /치과 시간 확인/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "삭제" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "삭제하기" }));
+    expect(screen.queryByRole("button", { name: /치과 시간 확인/ })).not.toBeInTheDocument();
   });
 
   it("키보드로 할 일을 선택해 다른 칸반 영역으로 옮긴다", () => {
